@@ -1,0 +1,6 @@
+node_modules/
+test-shots/
+dist/
+*.jks
+*.keystore
+android/local.properties

@@ -1,0 +1,23 @@
+{
+  "name": "cifropolis",
+  "version": "1.0.0",
+  "description": "Cifrópolis — Do Zero ao Império. Simulador de magnata idle/clicker para Android.",
+  "private": true,
+  "scripts": {
+    "serve": "npx http-server www -p 8080 -c-1",
+    "balance": "node tools/balance-sim.js",
+    "test": "node tools/smoke-test.js",
+    "sync": "npx cap sync android",
+    "apk:debug": "npx cap sync android && cd android && ./gradlew assembleDebug",
+    "apk:release": "npx cap sync android && cd android && ./gradlew assembleRelease"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@capacitor/android": "^7.6.10",
+    "@capacitor/app": "^7.1.2",
+    "@capacitor/core": "^7.6.10"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.6.10"
+  }
+}

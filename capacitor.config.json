@@ -1,0 +1,12 @@
+{
+  "appId": "com.cifropolis.tycoon",
+  "appName": "Cifrópolis",
+  "webDir": "www",
+  "backgroundColor": "#140b2b",
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false,
+    "adjustMarginsForEdgeToEdge": "auto"
+  }
+}

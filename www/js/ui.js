@@ -766,8 +766,8 @@
           '<span>🏪 Negócios automatizados</span><b class="pos">+' + F.money(b.biz, true) + '</b>' +
           '<span>💼 Salário (carreira)</span><b class="pos">+' + F.money(b.salary, true) + '</b>' +
           '<span>🏠 Aluguéis</span><b class="pos">+' + F.money(b.rent, true) + '</b>' +
-          '<span>👥 Salários de funcionários</span><b class="neg">-' + F.money(b.empUpkeep, true) + '</b>' +
-          '<span>🔧 Manutenção de imóveis</span><b class="neg">-' + F.money(b.rentUpkeep, true) + '</b>' +
+          '<span>👥 Salários de funcionários</span><b class="neg">' + (b.empUpkeep > 0 ? '-' : '') + F.money(b.empUpkeep, true) + '</b>' +
+          '<span>🔧 Manutenção de imóveis</span><b class="neg">' + (b.rentUpkeep > 0 ? '-' : '') + F.money(b.rentUpkeep, true) + '</b>' +
           '<span><b>Resultado líquido</b></span><b class="' + (b.net >= 0 ? 'pos' : 'neg') + '">' + F.money(b.net, true) + '/s</b>' +
           '<span>👆 Valor do toque</span><b>' + F.money(E.tapValue(s, now), true) + '</b>' +
           '<span>⚡ Multiplicador global</span><b>x' + E.globalMult(s, now).toFixed(2).replace('.', ',') + '</b></div>' +

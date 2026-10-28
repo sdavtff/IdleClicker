@@ -5,8 +5,11 @@
   var D = {};
 
   D.GAME_NAME = 'Cifrópolis';
+  D.VERSION = '1.1.0';
   D.SAVE_KEY = 'cifropolis_save_v1';
-  D.SAVE_VERSION = 1;
+  D.SAVE_VERSION = 2;
+  D.MAX_BIZ_LVL = 100000;  // limite de nível por negócio (evita overflow nos custos)
+  D.MAX_BUY_PER_TAP = 10000;
 
   // custo(n) = cost * r^n   |   receita/ciclo = rev * nivel * marcos * multiplicadores
   D.BUSINESSES = [
@@ -185,6 +188,63 @@
   D.AD_BOOST_MAX_H = 4;
   D.QUICK_CASH_MIN = 10;  // anúncio voluntário: 10 min de renda instantânea
   D.QUICK_CASH_CD = 15 * 60;
+  D.FREE_BOOST_CD_MIN = 30; // sem anúncios: recarga do Turbo gratuito após terminar
+
+
+  // Conquistas: permanentes (sobrevivem ao Legado). Cada uma dá +1% de receita dos negócios.
+  // t = tipo de verificação (ver G.achProgress), v = alvo.
+  D.ACH_BONUS = 0.01;
+  D.ACHIEVEMENTS = [
+    { id: 'tap100',    icon: '👆', name: 'Dedo Ligeiro',        t: 'taps',     v: 100,   txt: 'Toque 100 vezes' },
+    { id: 'tap5k',     icon: '🖐️', name: 'Mão de Ouro',         t: 'taps',     v: 5000,  txt: 'Toque 5.000 vezes' },
+    { id: 'tap50k',    icon: '🦾', name: 'Incansável',          t: 'taps',     v: 50000, txt: 'Toque 50.000 vezes' },
+    { id: 'job_all',   icon: '👑', name: 'Topo da Carreira',    t: 'jobs',     v: 7,     txt: 'Chegue a CEO Visionário' },
+    { id: 'biz3',      icon: '🏪', name: 'Empreendedor',        t: 'owned',    v: 3,     txt: 'Tenha 3 negócios' },
+    { id: 'biz_all',   icon: '🏙️', name: 'Dono da Cidade',      t: 'owned',    v: 8,     txt: 'Tenha os 8 negócios' },
+    { id: 'mgr1',      icon: '👔', name: 'Primeiro Gerente',    t: 'mgrs',     v: 1,     txt: 'Contrate um gerente' },
+    { id: 'mgr_all',   icon: '🗂️', name: 'Diretoria Completa',  t: 'mgrs',     v: 8,     txt: 'Contrate os 8 gerentes' },
+    { id: 'lvl100',    icon: '💯', name: 'Centenário',          t: 'maxlvl',   v: 100,   txt: 'Leve um negócio ao nível 100' },
+    { id: 'lvl250',    icon: '🚀', name: 'Expansão Total',      t: 'maxlvl',   v: 250,   txt: 'Leve um negócio ao nível 250' },
+    { id: 'emp_full',  icon: '👥', name: 'Equipe dos Sonhos',   t: 'empfull',  v: 1,     txt: 'Complete a equipe (10) de um negócio' },
+    { id: 'earn1m',    icon: '💵', name: 'Primeiro Milhão',     t: 'earned',   v: 1e6,   txt: 'Fature $1 M no total' },
+    { id: 'earn1b',    icon: '💰', name: 'Bilionário',          t: 'earned',   v: 1e9,   txt: 'Fature $1 B no total' },
+    { id: 'earn1t',    icon: '🏦', name: 'Trilionário',         t: 'earned',   v: 1e12,  txt: 'Fature $1 T no total' },
+    { id: 'earn1qa',   icon: '🌌', name: 'Além dos Trilhões',   t: 'earned',   v: 1e15,  txt: 'Fature $1 Qa no total' },
+    { id: 'ips1k',     icon: '📈', name: 'Renda Própria',       t: 'ips',      v: 1e3,   txt: 'Renda passiva de $1 K/s' },
+    { id: 'ips1m',     icon: '📊', name: 'Máquina de Dinheiro', t: 'ips',      v: 1e6,   txt: 'Renda passiva de $1 M/s' },
+    { id: 'ips1b',     icon: '⚙️', name: 'Império Automático',  t: 'ips',      v: 1e9,   txt: 'Renda passiva de $1 B/s' },
+    { id: 'trade10',   icon: '🔁', name: 'Operador',            t: 'trades',   v: 10,    txt: 'Faça 10 operações na bolsa' },
+    { id: 'profit1m',  icon: '🐂', name: 'Touro da Bolsa',      t: 'tprofit',  v: 1e6,   txt: 'Lucre $1 M no total na bolsa' },
+    { id: 'prop10',    icon: '🏘️', name: 'Senhorio',            t: 'propn',    v: 10,    txt: 'Tenha 10 imóveis' },
+    { id: 'shopping',  icon: '🛒', name: 'Rei do Varejo',       t: 'prop',     id2: 'shopping', v: 1, txt: 'Compre o Shopping Cifrão' },
+    { id: 'lux1',      icon: '⌚', name: 'Gosto Refinado',      t: 'luxn',     v: 1,     txt: 'Compre um item de luxo' },
+    { id: 'coll1',     icon: '🏆', name: 'Colecionador',        t: 'coll',     v: 1,     txt: 'Complete uma coleção de luxo' },
+    { id: 'lux_all',   icon: '💎', name: 'Acervo Completo',     t: 'luxn',     v: 13,    txt: 'Tenha todos os 13 itens de luxo' },
+    { id: 'fix5',      icon: '🧯', name: 'Apaga-Incêndio',      t: 'fixed',    v: 5,     txt: 'Resolva 5 crises ou concorrentes' },
+    { id: 'daily7',    icon: '📅', name: 'Disciplina',          t: 'daily',    v: 7,     txt: 'Complete as missões diárias em 7 dias' },
+    { id: 'tourwin',   icon: '🥇', name: 'Campeão do Pregão',   t: 'tourwin',  v: 1,     txt: 'Vença um torneio semanal' },
+    { id: 'legacy1',   icon: '🌅', name: 'Herdeiro',            t: 'prestige', v: 1,     txt: 'Funde seu primeiro Legado' },
+    { id: 'legacy5',   icon: '🏛️', name: 'Dinastia',            t: 'prestige', v: 5,     txt: 'Funde 5 Legados' },
+    { id: 'stars100',  icon: '🌟', name: 'Constelação',         t: 'stars',    v: 100,   txt: 'Tenha 100 estrelas de Legado' }
+  ];
+
+  // Missões diárias: 3 sorteadas por dia entre as disponíveis (req). Progresso = estatística atual − valor no início.
+  // target(s, ctx): alvo escalado ao momento do jogador; rewardMin: minutos de renda pagos ao concluir.
+  D.DAILY = [
+    { id: 'taps',   icon: '👆', txt: 'Toque {n} vezes',                 stat: 'taps',        rewardMin: 5 },
+    { id: 'levels', icon: '🏪', txt: 'Compre {n} níveis de negócios',   stat: 'bizLevels',   rewardMin: 8 },
+    { id: 'runs',   icon: '⚙️', txt: 'Complete {n} ciclos de produção', stat: 'bizRuns',     rewardMin: 6 },
+    { id: 'earn',   icon: '💵', txt: 'Fature {m}',                      stat: 'earned',      rewardMin: 8 },
+    { id: 'skills', icon: '🧠', txt: 'Melhore {n} habilidades',          stat: 'skillsBought', rewardMin: 8, req: 'skills' },
+    { id: 'trades', icon: '📈', txt: 'Faça {n} operações na bolsa',     stat: 'trades',      rewardMin: 6, req: 'inv' },
+    { id: 'props',  icon: '🏠', txt: 'Compre {n} imóveis',              stat: 'propsBought', rewardMin: 10, req: 'props' },
+    { id: 'fix',    icon: '🧯', txt: 'Resolva {n} crise ou concorrente', stat: 'eventsFixed', rewardMin: 10, req: 'biz2' }
+  ];
+  D.DAILY_BY_ID = {}; D.DAILY.forEach(function (d) { D.DAILY_BY_ID[d.id] = d; });
+  D.DAILY_BONUS_MIN = 15; // baú por concluir as 3 do dia
+
+  // Desbloqueio progressivo das abas (por faturamento total, que nunca diminui).
+  D.UNLOCKS = { inv: 3000, lux: 15000 };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = D;
   else root.D = D;

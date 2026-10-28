@@ -1,61 +1,54 @@
-/* Monetização justa.
- * - Somente anúncios RECOMPENSADOS e VOLUNTÁRIOS (o jogador escolhe assistir).
- * - Nenhum intersticial, nenhum pop-up de compra repetitivo.
- * - Compra única "Remover anúncios": as recompensas passam a ser instantâneas, sem vídeo.
+/* Monetização justa — camada de integração.
  *
- * Esta versão é 100% offline: AdService e Store são implementações de demonstração.
- * Para produção, troque os corpos de AdService.rewarded() e Store.buyRemoveAds() pelos
- * SDKs reais (ex.: AdMob Rewarded + Google Play Billing via plugins Capacitor). A interface
- * (Promise<boolean>) foi pensada para isso. */
+ * Regras do jogo:
+ * - Só anúncios RECOMPENSADOS e VOLUNTÁRIOS; nenhum intersticial, nenhum pop-up de compra.
+ * - Recompensa só é concedida quando o SDK confirma que o anúncio foi assistido até o fim.
+ * - Nenhum pagamento é simulado: sem loja configurada, não há compra disponível.
+ *
+ * Estado desta versão: NENHUM SDK de anúncios ou de pagamentos está integrado (o jogo é 100% offline).
+ * Por isso AdService.available() e Store.available() retornam false e o jogo oferece os mesmos
+ * bônus de forma GRATUITA, com tempo de recarga (ver G.useFreeBoost / G.applyQuickCash).
+ *
+ * Para integrar de verdade (ex.: plugin Capacitor de AdMob e Google Play Billing), implemente
+ * `provider` abaixo com as funções reais; o restante do jogo já usa esta interface. */
 (function (root) {
   'use strict';
 
+  // Ponto único de integração. Deixe null enquanto não houver SDK real configurado.
+  // Formato esperado:
+  //   { showRewarded: function (placement) { return Promise<boolean /* true só se assistiu até o fim */> } }
+  var provider = null;
+
   var AdService = {
-    // Retorna Promise<boolean>: true = recompensa liberada.
-    rewarded: function (label) {
-      var s = root.G && root.G.s;
-      if (s && s.noAds) return Promise.resolve(true); // comprou: recompensa direta, sem anúncio
-      return new Promise(function (resolve) {
-        var secs = 5;
-        var el = document.createElement('div');
-        el.className = 'ad-screen';
-        el.innerHTML =
-          '<div class="ad-tag">Anúncio de demonstração</div>' +
-          '<div class="ad-count">' + secs + '</div>' +
-          '<div class="ad-art">🎮</div>' +
-          '<h3 style="margin:14px 0 6px">Aqui entraria um vídeo recompensado</h3>' +
-          '<p style="opacity:.75;max-width:320px;font-size:14px">Recompensa: <b>' + label + '</b><br>Versão offline: nenhum anúncio real é carregado.</p>' +
-          '<div style="display:flex;gap:10px;margin-top:22px">' +
-          '<button class="btn ghost" data-a="cancel">Cancelar</button>' +
-          '<button class="btn alt off" data-a="ok">Aguarde...</button></div>';
-        document.body.appendChild(el);
-        var okBtn = el.querySelector('[data-a=ok]'), cnt = el.querySelector('.ad-count');
-        var timer = setInterval(function () {
-          secs--;
-          cnt.textContent = secs > 0 ? secs : '✓';
-          if (secs <= 0) {
-            clearInterval(timer);
-            okBtn.classList.remove('off');
-            okBtn.textContent = 'Receber recompensa';
-          }
-        }, 1000);
-        function close(v) { clearInterval(timer); el.remove(); resolve(v); }
-        el.querySelector('[data-a=cancel]').onclick = function () { close(false); };
-        okBtn.onclick = function () { if (secs <= 0) close(true); };
-      });
-    }
+    available: function () { return !!(provider && typeof provider.showRewarded === 'function'); },
+    // Promise<boolean>. Sem provedor real: nunca concede recompensa.
+    rewarded: function (placement) {
+      if (!AdService.available()) return Promise.resolve(false);
+      return Promise.resolve()
+        .then(function () { return provider.showRewarded(placement); })
+        .then(function (ok) { return ok === true; }, function () { return false; });
+    },
+    setProvider: function (p) { provider = p; }
   };
 
+  // Compras dentro do app. Sem integração com uma loja real, nada é vendido.
+  var storeProvider = null;
   var Store = {
-    PRICE_LABEL: 'R$ 9,90',
-    // Compra única não-consumível. Demonstração: simula uma compra bem-sucedida.
+    available: function () { return !!(storeProvider && typeof storeProvider.buy === 'function'); },
+    // Promise<boolean>: true só quando a loja confirma a compra.
     buyRemoveAds: function () {
-      return Promise.resolve(true);
+      if (!Store.available()) return Promise.resolve(false);
+      return Promise.resolve()
+        .then(function () { return storeProvider.buy('remove_ads'); })
+        .then(function (ok) { return ok === true; }, function () { return false; });
     },
     restore: function () {
-      var s = root.G && root.G.s;
-      return Promise.resolve(!!(s && s.noAds));
-    }
+      if (!Store.available() || typeof storeProvider.restore !== 'function') return Promise.resolve(false);
+      return Promise.resolve()
+        .then(function () { return storeProvider.restore('remove_ads'); })
+        .then(function (ok) { return ok === true; }, function () { return false; });
+    },
+    setProvider: function (p) { storeProvider = p; }
   };
 
   root.AdService = AdService;

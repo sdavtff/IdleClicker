@@ -29,6 +29,12 @@
   function show(el, on) { cls(el, 'hidden', !on); }
   function vibrate(ms) { try { if (G.s.settings.vib && navigator.vibrate) navigator.vibrate(ms); } catch (e) { /* ignore */ } }
   function btnLabel(btn, main, sub) { html(btn, main + (sub ? '<small>' + sub + '</small>' : '')); }
+  // Escapa texto para inserção segura em HTML (dados vindos de save/importação nunca entram crus).
+  var ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  function esc(v) { return String(v).replace(/[&<>"']/g, function (c) { return ESC[c]; }); }
+  // Modo dos bônus: 'ad' (anúncio recompensado real), 'paid' (comprou remover anúncios) ou 'free' (sem SDK de anúncios).
+  function bonusMode() { return G.s.noAds ? 'paid' : (root.AdService.available() ? 'ad' : 'free'); }
+  var MODE_ICON = { ad: '▶ ', paid: '⚡ ', free: '🎁 ' };
 
   // Executa uma ação de compra com feedback (som, vibração ou tremida)
   function act(btn, fn) {
@@ -41,6 +47,8 @@
   var UI = { tab: 'home', bizMode: 1, invTab: 'stock', sel: { stock: 'NXS', crypto: 'BYTE' }, qty: 1, moreTab: 'fin', screens: {} };
   root.UI = UI;
   UI.h = h;
+  UI.esc = esc;
+  UI.bonusMode = bonusMode;
 
   var LOGO_SVG =
     '<svg viewBox="0 0 100 100" aria-hidden="true">' +
@@ -69,6 +77,7 @@
     el.addEventListener('animationend', function () { el.remove(); fxCount--; });
   };
   UI.coins = function (x, y, n) {
+    if (UI.reduceMotion()) return;
     for (var i = 0; i < n; i++) {
       if (fxCount > 60) return;
       var c = h('div', { class: 'coin' });
@@ -196,11 +205,13 @@
       bar.appendChild(b);
     });
   }
+  function shownScreen() { return G.isUnlocked(UI.tab) ? UI.tab : 'locked'; }
   UI.go = function (tab) {
     UI.tab = tab;
-    Object.keys(UI.screens).forEach(function (k) { cls(UI.screens[k].el, 'active', k === tab); });
+    var shown = shownScreen();
+    Object.keys(UI.screens).forEach(function (k) { cls(UI.screens[k].el, 'active', k === shown); });
     Object.keys(tabBtns).forEach(function (k) { cls(tabBtns[k], 'on', k === tab); });
-    var scr = UI.screens[tab];
+    var scr = UI.screens[shown];
     if (scr.onShow) scr.onShow();
     UI.update();
   };
@@ -228,7 +239,94 @@
   }
 
   // =====================================================================
-  // INÍCIO: toque, anúncios voluntários, carreira, habilidades
+  // MISSÕES DIÁRIAS (cartão na tela Início)
+  // =====================================================================
+  var daily = {};
+  function buildDaily(parent) {
+    daily.timer = h('div', { class: 'muted' });
+    daily.rows = [0, 1, 2].map(function (i) {
+      var x = { ico: h('div', { class: 'mico' }), txt: h('div', { class: 'mtxt' }), bar: h('i'), sub: h('div', { class: 'muted' }), btn: h('button', { class: 'btn mbtn' }) };
+      x.btn.addEventListener('click', function () {
+        var a = G.claimDaily(i);
+        if (!a) { act(x.btn, function () { return false; }); return; }
+        root.Sfx.big(); vibrate(15);
+        var rc = x.btn.getBoundingClientRect();
+        UI.coins(rc.left + rc.width / 2, rc.top, 10);
+        UI.toast('📅 Missão concluída: <b>+' + F.money(a) + '</b>', 'good');
+        root.Game.save(); UI.update();
+      });
+      x.el = h('div', { class: 'mission' }, x.ico, h('div', { class: 'grow' }, x.txt, h('div', { class: 'bar' }, x.bar), x.sub), x.btn);
+      return x;
+    });
+    daily.bonus = h('button', { class: 'btn wide pink', id: 'dailyBonus' });
+    daily.bonus.addEventListener('click', function () {
+      var a = G.claimDailyBonus();
+      if (!a) { act(daily.bonus, function () { return false; }); return; }
+      root.Sfx.big(); vibrate(30);
+      var rc = daily.bonus.getBoundingClientRect();
+      UI.coins(rc.left + rc.width / 2, rc.top, 18);
+      UI.toast('🎁 Baú diário: <b>+' + F.money(a) + '</b> · sequência de ' + G.s.daily.streak + ' dia(s)!', 'good', null, 4500);
+      root.Game.save(); UI.update();
+    });
+    daily.card = h('div', { class: 'card daily', id: 'dailyCard' },
+      h('div', { class: 'row' }, h('div', { class: 'title grow', text: '📅 Missões do dia' }), daily.timer),
+      daily.rows.map(function (x) { return x.el; }), daily.bonus);
+    parent.appendChild(daily.card);
+  }
+  UI.updateDaily = function () {
+    var dl = G.s.daily;
+    show(daily.card, !!dl && dl.list.length > 0);
+    if (!dl) return;
+    var d = new Date(), midnight = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime();
+    txt(daily.timer, 'renova em ' + F.time((midnight - Date.now()) / 1000));
+    daily.rows.forEach(function (x, i) {
+      var m = dl.list[i];
+      show(x.el, !!m);
+      if (!m) return;
+      var p = G.dailyProgress(m), isMoney = p.def.stat === 'earned';
+      txt(x.ico, p.def.icon);
+      txt(x.txt, G.dailyText(m));
+      x.bar.style.width = (m.claimed ? 100 : p.frac * 100).toFixed(1) + '%';
+      txt(x.sub, m.claimed ? 'Prêmio resgatado' : (isMoney ? F.money(p.cur) + ' / ' + F.money(p.target) : F.num(p.cur) + ' / ' + F.num(p.target)) + ' · prêmio ' + F.money(m.reward));
+      cls(x.el, 'claimed', m.claimed);
+      if (m.claimed) { btnLabel(x.btn, '✓'); cls(x.btn, 'done', true); cls(x.btn, 'off', false); cls(x.btn, 'ready', false); }
+      else if (p.done) { btnLabel(x.btn, 'Resgatar'); cls(x.btn, 'done', false); cls(x.btn, 'off', false); cls(x.btn, 'ready', true); }
+      else { btnLabel(x.btn, Math.floor(p.frac * 100) + '%'); cls(x.btn, 'done', false); cls(x.btn, 'off', true); cls(x.btn, 'ready', false); }
+    });
+    if (dl.bonus) { btnLabel(daily.bonus, '✓ Baú aberto — volte amanhã', 'sequência: ' + dl.streak + ' dia(s)'); cls(daily.bonus, 'done', true); cls(daily.bonus, 'off', false); }
+    else if (G.dailyBonusReady()) { btnLabel(daily.bonus, '🎁 Abrir baú diário', '+' + F.money(G.dailyBonusAmount())); cls(daily.bonus, 'done', false); cls(daily.bonus, 'off', false); }
+    else { btnLabel(daily.bonus, '🎁 Baú diário', 'conclua e resgate as 3 missões'); cls(daily.bonus, 'done', false); cls(daily.bonus, 'off', true); }
+  };
+
+  // =====================================================================
+  // ABA BLOQUEADA (desbloqueio progressivo)
+  // =====================================================================
+  var LOCK_INFO = {
+    inv: { icon: '📈', title: 'Investimentos', desc: 'Bolsa de valores, criptomoedas voláteis e imóveis que pagam aluguel — inclusive offline.' },
+    lux: { icon: '💎', title: 'Luxo & Coleção', desc: 'Relógios, carros, iates, jatos e obras de arte que dão bônus permanentes e status.' }
+  };
+  function buildLocked() {
+    var sc = screen('locked'), r = {};
+    r.icon = h('div', { class: 'lock-ico' });
+    r.title = h('h3');
+    r.desc = h('p', { class: 'muted' });
+    r.req = h('div', { class: 'lock-req' });
+    r.bar = h('i');
+    r.go = h('button', { class: 'btn', text: '🏪 Ir para Negócios' });
+    r.go.addEventListener('click', function () { UI.go('biz'); });
+    sc.el.appendChild(h('div', { class: 'card empty-state' }, r.icon, r.title, r.desc, r.req, h('div', { class: 'bar big' }, r.bar), r.go));
+    sc.update = function () {
+      var info = LOCK_INFO[UI.tab] || LOCK_INFO.inv, need = D.UNLOCKS[UI.tab] || 1, have = G.s.lifetimeEarned;
+      txt(r.icon, '🔒' + info.icon);
+      txt(r.title, info.title);
+      txt(r.desc, info.desc);
+      txt(r.req, 'Desbloqueia ao faturar ' + F.money(need) + ' no total · ' + F.money(have) + ' até agora');
+      r.bar.style.width = Math.min(100, have / need * 100).toFixed(1) + '%';
+    };
+  }
+
+  // =====================================================================
+  // INÍCIO: toque, bônus voluntários, missões, carreira, habilidades
   // =====================================================================
   function buildHome() {
     var sc = screen('home'), el = sc.el, r = {};
@@ -250,26 +348,40 @@
 
     r.boostBtn = h('button', { class: 'btn pink' });
     r.quickBtn = h('button', { class: 'btn alt' });
+    function boostDone() { root.Sfx.big(); UI.toast('⚡ Turbo x2 ativado!', 'good'); UI.update(); root.Game.save(); }
     r.boostBtn.addEventListener('click', function () {
-      if (G.s.boost.adUntil - Date.now() > (D.AD_BOOST_MAX_H * 60 - D.AD_BOOST_MIN) * 60000) { UI.toast('⚡ Turbo já está no máximo (' + D.AD_BOOST_MAX_H + 'h).', 'info'); return; }
-      root.AdService.rewarded('Turbo x2 por ' + D.AD_BOOST_MIN + ' min').then(function (ok) {
-        if (!ok) return;
-        G.applyAdBoost(); root.Sfx.big(); UI.toast('⚡ Turbo x2 ativado!', 'good'); UI.update(); root.Game.save();
+      var mode = bonusMode(), now = Date.now();
+      if (mode === 'free') {
+        if (!G.useFreeBoost()) { root.Sfx.error(); UI.toast('⏳ Turbo grátis disponível em ' + F.time((G.s.boost.turboAt - now) / 1000), 'info'); return; }
+        boostDone(); return;
+      }
+      if (G.s.boost.adUntil - now > (D.AD_BOOST_MAX_H * 60 - D.AD_BOOST_MIN) * 60000) { UI.toast('⚡ Turbo já está no máximo (' + D.AD_BOOST_MAX_H + 'h).', 'info'); return; }
+      if (mode === 'paid') { G.applyAdBoost(); boostDone(); return; }
+      root.AdService.rewarded('turbo').then(function (ok) {
+        if (!ok) { UI.toast('Anúncio não concluído — nenhuma recompensa foi dada.', 'info'); return; }
+        G.applyAdBoost(); boostDone();
       });
     });
+    function quickDone() {
+      var a = G.applyQuickCash();
+      if (!a) return;
+      root.Sfx.big();
+      var rc = r.quickBtn.getBoundingClientRect();
+      UI.coins(rc.left + rc.width / 2, rc.top, 14);
+      UI.toast('💰 +' + F.money(a) + ' de lucro rápido!', 'good'); UI.update(); root.Game.save();
+    }
     r.quickBtn.addEventListener('click', function () {
-      if (!G.quickCashReady()) { UI.toast('⏳ Disponível em ' + F.time((G.s.boost.quickAt - Date.now()) / 1000), 'info'); return; }
-      var amt = G.quickCashAmount();
-      root.AdService.rewarded('Lucro rápido de ' + F.money(amt)).then(function (ok) {
-        if (!ok) return;
-        var a = G.applyQuickCash();
-        root.Sfx.big();
-        var rc = r.quickBtn.getBoundingClientRect();
-        UI.coins(rc.left + rc.width / 2, rc.top, 14);
-        UI.toast('💰 +' + F.money(a) + ' de lucro rápido!', 'good'); UI.update(); root.Game.save();
+      if (!G.quickCashReady()) { root.Sfx.error(); UI.toast('⏳ Disponível em ' + F.time((G.s.boost.quickAt - Date.now()) / 1000), 'info'); return; }
+      if (bonusMode() !== 'ad') { quickDone(); return; }
+      root.AdService.rewarded('quick_cash').then(function (ok) {
+        if (!ok) { UI.toast('Anúncio não concluído — nenhuma recompensa foi dada.', 'info'); return; }
+        quickDone();
       });
     });
+    r.bonusNote = h('div', { class: 'muted note' });
     el.appendChild(h('div', { class: 'ad-row' }, r.boostBtn, r.quickBtn));
+    el.appendChild(r.bonusNote);
+    buildDaily(el);
 
     el.appendChild(h('h2', { text: 'Carreira' }));
     r.jobIco = h('div', { class: 'ico' });
@@ -293,11 +405,22 @@
     sc.update = function () {
       var s = G.s, now = Date.now();
       txt(r.tapVal, '+' + F.money(E.tapValue(s, now), true) + ' por toque');
-      var free = s.noAds ? '⚡ ' : '▶ ';
-      btnLabel(r.boostBtn, free + 'Turbo x2', s.boost.adUntil > now ? 'ativo: ' + F.time((s.boost.adUntil - now) / 1000) + ' (+30 min)' : D.AD_BOOST_MIN + ' min de renda dobrada');
-      if (G.quickCashReady()) btnLabel(r.quickBtn, free + 'Lucro rápido', '+' + F.money(G.quickCashAmount()));
+      var mode = bonusMode(), ic = MODE_ICON[mode], active = s.boost.adUntil > now;
+      if (mode === 'free') {
+        var ready = G.freeBoostReady();
+        btnLabel(r.boostBtn, ic + 'Turbo x2', active ? 'ativo: ' + F.time((s.boost.adUntil - now) / 1000)
+          : ready ? D.AD_BOOST_MIN + ' min de renda dobrada' : 'recarga: ' + F.time((s.boost.turboAt - now) / 1000));
+        cls(r.boostBtn, 'off', !ready);
+      } else {
+        btnLabel(r.boostBtn, ic + 'Turbo x2', active ? 'ativo: ' + F.time((s.boost.adUntil - now) / 1000) + ' (+30 min)' : D.AD_BOOST_MIN + ' min de renda dobrada');
+        cls(r.boostBtn, 'off', false);
+      }
+      if (G.quickCashReady()) btnLabel(r.quickBtn, ic + 'Lucro rápido', '+' + F.money(G.quickCashAmount()));
       else btnLabel(r.quickBtn, '⏳ Lucro rápido', 'em ' + F.time((s.boost.quickAt - now) / 1000));
       cls(r.quickBtn, 'off', !G.quickCashReady());
+      txt(r.bonusNote, mode === 'free' ? '🎁 Versão sem anúncios: bônus gratuitos com tempo de recarga.'
+        : mode === 'ad' ? '▶ Opcional: assista a um anúncio para receber o bônus.' : '⚡ Anúncios removidos: bônus instantâneos.');
+      UI.updateDaily();
 
       var cur = D.JOBS[s.jobs - 1], next = D.JOBS[s.jobs];
       txt(r.jobCur, cur ? 'Cargo atual: ' + cur.name + ' · salário ' + F.money(E.salary(s), true) + '/s' : 'Você está desempregado(a)');
@@ -572,7 +695,7 @@
       r.seg.refresh();
       // torneio
       var rk = M.ranking(s, now).findIndex(function (x) { return x.me; }) + 1;
-      html(r.tourTxt, '<b>Torneio semanal da bolsa</b><br>Você está em <b>#' + rk + '</b> · lucro ' + F.money(s.tour.score) +
+      html(r.tourTxt, '<b>Torneio semanal da bolsa</b> <span class="sim-tag">rivais simulados</span><br>Você está em <b>#' + rk + '</b> · lucro ' + F.money(s.tour.score) +
         ' · termina em ' + F.time((M.weekEnd(s.tour.week) - now) / 1000));
       show(r.market, type !== 'prop');
       show(r.props, type === 'prop');
@@ -615,7 +738,7 @@
       cls(r.buyB, 'off', bq <= 0 || s.cash < bq * m.p * (1 + D.TRADE_FEE));
       cls(r.sellB, 'off', sq <= 0);
       html(r.newsCard, s.news.length ? s.news.slice(0, 4).map(function (n) {
-        return '<div class="news">' + (n.up ? '🟢 ' : '🔴 ') + n.txt + '</div>';
+        return '<div class="news">' + (n.up ? '🟢 ' : '🔴 ') + esc(n.txt) + '</div>';
       }).join('') : '<div class="muted">Sem notícias por enquanto. Fique de olho: notícias mexem nos preços!</div>');
       drawChart(false);
     };
@@ -677,9 +800,24 @@
   // =====================================================================
   function buildMore() {
     var sc = screen('more'), el = sc.el, r = {};
-    r.seg = seg([['fin', 'Finanças'], ['tour', 'Torneio'], ['legacy', 'Legado'], ['set', 'Ajustes']],
-      function () { return UI.moreTab; }, function (v) { UI.moreTab = v; });
+    r.seg = seg([['fin', '💰\nFinanças'], ['ach', '🏅\nConquistas'], ['tour', '🏆\nTorneio'], ['legacy', '🌅\nLegado'], ['set', '⚙️\nAjustes']],
+      function () { return UI.moreTab; }, function (v) { UI.moreTab = v; if (v === 'set') r.bakDirty = true; });
+    r.seg.classList.add('seg-icons');
     el.appendChild(r.seg);
+
+    // Conquistas
+    r.ach = h('div');
+    r.achHero = h('div', { class: 'card stat-hero' });
+    r.achGrid = h('div', { class: 'ach-grid' });
+    r.achItems = D.ACHIEVEMENTS.map(function (a) {
+      var x = { bar: h('i'), sub: h('div', { class: 'muted' }) };
+      x.el = h('div', { class: 'ach', id: 'ach-' + a.id }, h('div', { class: 'ach-ico', text: a.icon }),
+        h('div', { class: 'grow' }, h('div', { class: 'title', text: a.name }), h('div', { class: 'small', text: a.txt }), h('div', { class: 'bar' }, x.bar), x.sub));
+      r.achGrid.appendChild(x.el);
+      return x;
+    });
+    add(r.ach, [r.achHero, r.achGrid]);
+    el.appendChild(r.ach);
 
     // Finanças
     r.fin = h('div');
@@ -717,17 +855,20 @@
       row.sw = sw; row.key = key;
       return row;
     }
-    r.toggles = [toggle('🔊 Sons', 'sound', function (v) { root.Sfx.setEnabled(v); }), toggle('📳 Vibração', 'vib')];
+    r.toggles = [toggle('🔊 Sons', 'sound', function (v) { root.Sfx.setEnabled(v); }), toggle('📳 Vibração', 'vib'),
+      toggle('🐢 Reduzir animações', 'reduceMotion', UI.applySettings), toggle('🔠 Texto maior', 'bigText', UI.applySettings)];
     r.adsCard = h('div', { class: 'card' });
+    r.adsTxt = h('div', { class: 'muted', style: 'margin:4px 0 10px' });
     r.noAdsBtn = h('button', { class: 'btn wide', id: 'noAdsBtn' });
     r.noAdsBtn.addEventListener('click', function () { UI.buyNoAds(); });
-    var restore = h('button', { class: 'btn ghost wide', style: 'margin-top:8px', text: 'Restaurar compra' });
-    restore.addEventListener('click', function () {
-      root.Store.restore().then(function (ok) { UI.toast(ok ? 'Compra restaurada ✓' : 'Nenhuma compra encontrada.', ok ? 'good' : 'info'); });
+    r.restoreBtn = h('button', { class: 'btn ghost wide', style: 'margin-top:8px', text: 'Restaurar compra' });
+    r.restoreBtn.addEventListener('click', function () {
+      root.Store.restore().then(function (ok) {
+        if (ok) { G.s.noAds = true; root.Game.save(); UI.update(); }
+        UI.toast(ok ? 'Compra restaurada ✓' : 'Nenhuma compra encontrada.', ok ? 'good' : 'info');
+      });
     });
-    add(r.adsCard, [h('div', { class: 'title', text: 'Monetização justa' }),
-      h('div', { class: 'muted', style: 'margin:4px 0 10px', html: 'Aqui anúncios são <b>sempre opcionais</b>: você só vê um se tocar em ▶ para ganhar uma recompensa. Sem anúncios forçados, sem pop-ups de compra.<br>A compra única libera todas as recompensas <b>sem precisar assistir nada</b>.' }),
-      r.noAdsBtn, restore]);
+    add(r.adsCard, [h('div', { class: 'title', text: 'Anúncios e compras' }), r.adsTxt, r.noAdsBtn, r.restoreBtn]);
     var tutBtn = h('button', { class: 'btn ghost wide', text: '🎓 Rever tutorial' });
     tutBtn.addEventListener('click', function () { G.s.tutorial = 0; UI.go('home'); root.Tutorial.start(); });
     var expBtn = h('button', { class: 'btn ghost', text: '📤 Exportar save' });
@@ -738,28 +879,86 @@
       try { navigator.clipboard.writeText(ta.value); UI.toast('Código copiado!', 'good'); } catch (e) { UI.toast('Copie o código abaixo.', 'info'); }
     });
     impBtn.addEventListener('click', function () {
-      if (!ta.value.trim()) { UI.toast('Cole um código de save primeiro.', 'info'); return; }
-      if (G.importSave(ta.value)) { root.Game.save(); UI.toast('Save importado ✓', 'good'); UI.update(); } else UI.toast('Código inválido.', 'bad');
+      var code = ta.value;
+      var check;
+      try { check = root.SaveIO.sanitize(root.SaveIO.decode(code), G.newState(), Date.now()); }
+      catch (e) { root.Sfx.error(); UI.toast('❌ ' + esc(e.message), 'bad', null, 4500); return; }
+      UI.modal({ icon: '📥', title: 'Substituir o progresso atual?',
+        html: '<p>O save importado tem <b>' + F.money(E.netWorth(check)) + '</b> de patrimônio e <b>' + check.stars + ' ⭐</b>.</p>' +
+          '<p>Seu progresso atual será guardado como backup e poderá ser restaurado aqui mesmo.</p>',
+        buttons: [
+          { label: 'Importar', cls: 'btn', fn: function () {
+            try { G.importSave(code); } catch (e) { UI.toast('❌ ' + esc(e.message), 'bad', null, 4500); return; }
+            ta.value = ''; r.bakDirty = true; UI.applySettings(); root.Sfx.setEnabled(G.s.settings.sound);
+            UI.toast('✓ Save importado.', 'good'); UI.go('home');
+          } },
+          { label: 'Cancelar', cls: 'btn ghost' }] });
     });
+    r.bakList = h('div');
     var resetBtn = h('button', { class: 'btn red wide', text: '🗑️ Apagar todo o progresso' });
     resetBtn.addEventListener('click', function () {
-      UI.modal({ icon: '⚠️', title: 'Apagar tudo?', html: '<p>Todo o progresso, incluindo estrelas e coleção, será perdido. Não dá para desfazer.</p>',
-        buttons: [{ label: 'Apagar definitivamente', cls: 'btn red', fn: function () { G.reset(); root.Game.save(); UI.go('home'); root.Tutorial.start(); } },
+      UI.modal({ icon: '⚠️', title: 'Apagar tudo?', html: '<p>Todo o progresso, incluindo estrelas, coleção e conquistas, será apagado.</p><p>Uma cópia fica em <b>Backups locais</b> até a próxima importação ou restauração.</p>',
+        buttons: [{ label: 'Apagar progresso', cls: 'btn red', fn: function () {
+          UI.modal({ icon: '⚠️', title: 'Tem certeza?', html: '<p>Esta é a última confirmação.</p>', buttons: [
+            { label: 'Sim, apagar', cls: 'btn red', fn: function () { G.reset(); r.bakDirty = true; UI.applySettings(); UI.go('home'); root.Tutorial.start(); } },
+            { label: 'Cancelar', cls: 'btn ghost' }] });
+        } },
                   { label: 'Cancelar', cls: 'btn ghost' }] });
     });
     add(r.set, [h('div', { class: 'card' }, r.toggles), r.adsCard,
       h('div', { class: 'card' }, tutBtn, h('div', { style: 'height:8px' }),
-        h('div', { class: 'title', text: 'Backup do progresso' }),
-        h('div', { class: 'muted', style: 'margin:4px 0 8px', text: 'O jogo salva sozinho no aparelho a cada 10 s e ao sair.' }),
+        h('div', { class: 'title', text: 'Exportar / importar' }),
+        h('div', { class: 'muted', style: 'margin:4px 0 8px', text: 'O jogo salva sozinho no aparelho a cada 10 s e ao sair. Exporte para guardar uma cópia fora do aparelho.' }),
         ta, h('div', { class: 'trade-btns', style: 'margin-top:8px' }, expBtn, impBtn)),
+      h('div', { class: 'card' }, h('div', { class: 'title', text: 'Backups locais' }),
+        h('div', { class: 'muted', style: 'margin:4px 0 8px', text: 'Cópias automáticas guardadas no aparelho.' }), r.bakList),
       resetBtn,
-      h('div', { class: 'muted', style: 'text-align:center;padding:16px', html: D.GAME_NAME + ' · v1.0.0 · Feito para jogar com uma mão 🤙<br>Funciona 100% offline.' })]);
+      h('div', { class: 'muted', style: 'text-align:center;padding:16px', html: D.GAME_NAME + ' · v' + D.VERSION + ' · Feito para jogar com uma mão 🤙<br>Funciona 100% offline.' })]);
     el.appendChild(r.set);
+
+    var BAK_LABEL = { auto: '🕒 Backup automático', pre: '↩️ Antes da última importação/restauração', bad: '🩹 Save danificado (cópia original)' };
+    function renderBackups() {
+      r.bakDirty = false;
+      r.bakList.innerHTML = '';
+      var info = G.backupInfo(), keys = Object.keys(info);
+      if (!keys.length) { r.bakList.appendChild(h('div', { class: 'muted', text: 'Nenhum backup ainda — o primeiro é criado em alguns minutos.' })); return; }
+      keys.forEach(function (k) {
+        var b = info[k];
+        var when = b.valid && b.time ? new Date(b.time).toLocaleString('pt-BR') : '';
+        var desc = b.valid ? when + ' · patrimônio ' + F.money(b.nw) : 'Não pode ser carregado (' + (b.error || 'inválido') + ')';
+        var btn = h('button', { class: 'btn ghost', text: b.valid ? 'Restaurar' : 'Copiar' });
+        btn.addEventListener('click', function () {
+          if (!b.valid) {
+            ta.value = G.backupRaw(k) || '';
+            try { navigator.clipboard.writeText(ta.value); UI.toast('Conteúdo copiado para você guardar.', 'good'); } catch (e) { UI.toast('Conteúdo exibido na caixa de texto acima.', 'info'); }
+            return;
+          }
+          UI.modal({ icon: '↩️', title: 'Restaurar este backup?', html: '<p>' + esc(desc) + '</p><p>O progresso atual será guardado como "antes da última restauração".</p>',
+            buttons: [{ label: 'Restaurar', cls: 'btn', fn: function () {
+              try { G.restoreBackup(k); UI.toast('✓ Backup restaurado.', 'good'); UI.applySettings(); UI.go('home'); } catch (e) { UI.toast('❌ ' + esc(e.message), 'bad'); }
+              r.bakDirty = true;
+            } }, { label: 'Cancelar', cls: 'btn ghost' }] });
+        });
+        r.bakList.appendChild(h('div', { class: 'bak-row' }, h('div', { class: 'grow' }, h('div', { class: 'small', text: BAK_LABEL[k] }), h('div', { class: 'muted', text: desc })), btn));
+      });
+    }
 
     sc.update = function () {
       var s = G.s, now = Date.now(), t = UI.moreTab;
       r.seg.refresh();
-      show(r.fin, t === 'fin'); show(r.tour, t === 'tour'); show(r.legacy, t === 'legacy'); show(r.set, t === 'set');
+      show(r.fin, t === 'fin'); show(r.ach, t === 'ach'); show(r.tour, t === 'tour'); show(r.legacy, t === 'legacy'); show(r.set, t === 'set');
+      if (t === 'ach') {
+        var n = E.achCount(s);
+        html(r.achHero, '<div class="muted">Conquistas</div><div class="v">🏅 ' + n + '/' + D.ACHIEVEMENTS.length + '</div>' +
+          '<div class="muted">Bônus permanente: <b class="pos">+' + Math.round(n * D.ACH_BONUS * 100) + '%</b> na receita dos negócios · mantido após o Legado</div>');
+        D.ACHIEVEMENTS.forEach(function (a, i) {
+          var x = r.achItems[i], p = G.achProgress(a);
+          cls(x.el, 'done', p.done);
+          x.bar.style.width = (p.done ? 100 : p.frac * 100).toFixed(1) + '%';
+          var money = a.t === 'earned' || a.t === 'ips' || a.t === 'tprofit';
+          txt(x.sub, p.done ? '✓ Concluída · +1%' : (money ? F.money(p.cur) + ' / ' + F.money(p.target) : F.num(p.cur) + ' / ' + F.num(p.target)));
+        });
+      }
       if (t === 'fin') {
         var b = E.breakdown(s, now), pv = E.portfolioValue(s), nw = E.netWorth(s);
         html(r.finInc, '<div class="kv">' +
@@ -792,6 +991,7 @@
         var rank = M.ranking(s, now);
         var me = rank.findIndex(function (x) { return x.me; }) + 1;
         html(r.tourHead, '<div class="row"><div style="font-size:40px">🏆</div><div class="grow"><div class="title">Torneio Semanal da Bolsa</div>' +
+          '<div class="sim-tag">Modo offline · rivais simulados no aparelho</div>' +
           '<div class="muted">Termina em ' + F.time((M.weekEnd(s.tour.week) - now) / 1000) + ' · Sua posição: <b style="color:var(--gold)">#' + me + '</b>' +
           (s.tour.best ? ' · Melhor: #' + s.tour.best : '') + '</div></div></div>');
         html(r.tourRank, '<table class="rank">' + rank.map(function (x, i) {
@@ -809,9 +1009,19 @@
         btnLabel(r.legBtn, pot > 0 ? '🌅 Fundar Legado (+' + pot + ' ⭐)' : 'Fature mais para ganhar estrelas', pot > 0 ? 'recomeçar com +' + Math.round((s.stars + pot) * 10) + '% de renda' : '');
         cls(r.legBtn, 'off', pot < 1);
       } else {
-        r.toggles.forEach(function (tg) { cls(tg.sw, 'on', !!s.settings[tg.key]); });
-        if (s.noAds) { btnLabel(r.noAdsBtn, '✓ Anúncios removidos', 'recompensas instantâneas liberadas'); cls(r.noAdsBtn, 'done', true); }
-        else btnLabel(r.noAdsBtn, '🚫 Remover anúncios — ' + root.Store.PRICE_LABEL, 'compra única · recompensas sem vídeo');
+        r.toggles.forEach(function (tg) { cls(tg.sw, 'on', !!s.settings[tg.key]); tg.sw.setAttribute('aria-pressed', String(!!s.settings[tg.key])); });
+        var storeOn = root.Store.available(), adsOn = root.AdService.available();
+        if (s.noAds) {
+          txt(r.adsTxt, 'Anúncios removidos nesta conta: os bônus são instantâneos.');
+        } else if (!adsOn && !storeOn) {
+          txt(r.adsTxt, 'Esta versão não exibe anúncios e não vende nada: nenhum SDK de anúncios ou loja está configurado. Os bônus (Turbo e Lucro rápido) são gratuitos, com tempo de recarga.');
+        } else {
+          txt(r.adsTxt, 'Anúncios são sempre opcionais: você só vê um se tocar em ▶ para ganhar um bônus. A compra única deixa os bônus instantâneos, sem vídeo.');
+        }
+        show(r.noAdsBtn, storeOn && !s.noAds);
+        show(r.restoreBtn, storeOn);
+        if (storeOn && !s.noAds) btnLabel(r.noAdsBtn, '🚫 Remover anúncios', 'compra única · bônus sem vídeo');
+        if (r.bakDirty) renderBackups();
       }
     };
   }
@@ -844,57 +1054,70 @@
     UI.update();
   };
 
+  // Compra real pela loja configurada (Store.available()). Sem loja, o botão nem aparece.
   UI.buyNoAds = function () {
-    if (G.s.noAds) return;
-    UI.modal({ icon: '🚫', title: 'Remover anúncios', html:
-      '<p>Compra única de <b>' + root.Store.PRICE_LABEL + '</b>. Todas as recompensas (Turbo, Lucro rápido, dobrar offline) ficam instantâneas, sem vídeo, para sempre.</p>' +
-      '<p class="muted" style="font-size:12px">Versão de demonstração offline: a compra é simulada e nada é cobrado.</p>',
-      buttons: [
-        { label: 'Comprar', cls: 'btn', fn: function () {
-          root.Store.buyRemoveAds().then(function (ok) {
-            if (!ok) return;
-            G.s.noAds = true; root.Game.save(); root.Sfx.big();
-            UI.toast('✓ Obrigado! Anúncios removidos.', 'good'); UI.update();
-          });
-        } },
-        { label: 'Agora não', cls: 'btn ghost' }] });
+    if (G.s.noAds || !root.Store.available()) return;
+    root.Store.buyRemoveAds().then(function (ok) {
+      if (!ok) { UI.toast('Compra não concluída. Nada foi cobrado pelo jogo.', 'info'); return; }
+      G.s.noAds = true; root.Game.save(); root.Sfx.big();
+      UI.toast('✓ Obrigado! Anúncios removidos.', 'good'); UI.update();
+    });
   };
 
   UI.showOffline = function (off) {
     if (!off || off.amount <= 0) return;
-    var claimed = false;
+    var claimed = false, mode = bonusMode(), p = off.parts;
+    var line = function (label, v, neg) { return v > 0 ? '<span>' + label + '</span><b class="' + (neg ? 'neg' : 'pos') + '">' + (neg ? '-' : '+') + F.money(v) + '</b>' : ''; };
+    var buttons = [];
+    if (mode !== 'free') buttons.push({ label: MODE_ICON[mode] + 'Dobrar para ' + F.money(off.amount * 2), cls: 'btn pink', keep: true, fn: function () {
+      if (claimed) return false;
+      var give = function () {
+        if (claimed) return;
+        claimed = true;
+        G.earn(off.amount);
+        root.Sfx.big();
+        UI.toast('💰 Ganhos offline dobrados: +' + F.money(off.amount), 'good');
+        UI.closeTopModal(); root.Game.save(); UI.update();
+      };
+      if (mode === 'paid') { give(); return false; }
+      root.AdService.rewarded('offline_double').then(function (ok) {
+        if (ok) give(); else UI.toast('Anúncio não concluído — nenhuma recompensa foi dada.', 'info');
+      });
+      return false;
+    } });
+    buttons.push({ label: 'Coletar', cls: 'btn', fn: function () { claimed = true; root.Sfx.buy(); } });
     UI.modal({ icon: '🌙', title: 'Bem-vindo(a) de volta!', closable: false, html:
-      '<p>Você ficou fora por <b>' + F.time(off.elapsed) + '</b>.' + (off.capped ? '<br>(limite de ' + off.capH + 'h de ganhos offline)' : '') + '</p>' +
-      '<p>Seus gerentes e imóveis renderam:</p><div class="big-num">+' + F.money(off.amount) + '</div>',
-      buttons: [
-        { label: (G.s.noAds ? '⚡' : '▶') + ' Dobrar para ' + F.money(off.amount * 2), cls: 'btn pink', keep: true, fn: function (btn) {
-          if (claimed) return false;
-          root.AdService.rewarded('Dobrar ganhos offline').then(function (ok) {
-            if (!ok || claimed) return;
-            claimed = true;
-            G.earn(off.amount); G.s.stats.adsWatched++;
-            root.Sfx.big();
-            UI.toast('💰 Ganhos offline dobrados: +' + F.money(off.amount), 'good');
-            UI.closeTopModal(); root.Game.save(); UI.update();
-          });
-          return false;
-        } },
-        { label: 'Coletar', cls: 'btn', fn: function () { claimed = true; root.Sfx.buy(); } }] });
+      '<p>Você ficou fora por <b>' + F.time(off.elapsed) + '</b>.' + (off.capped ? '<br>Contamos <b>' + F.time(off.secs) + '</b> (limite de ' + off.capH + 'h — aumente com a habilidade Sono Produtivo).' : '') + '</p>' +
+      '<div class="big-num">+' + F.money(off.amount) + '</div>' +
+      '<div class="kv left">' + line('🏪 Negócios com gerente', p.biz) + line('💼 Salário', p.salary) + line('🏠 Aluguéis (líquido)', p.rent) +
+      line('⚙️ Ciclos manuais concluídos', p.manual) + line('👥 Salários de funcionários', p.empUpkeep, true) + '</div>' +
+      '<p class="muted small">Média de ' + F.money(off.rate, true) + '/s enquanto você estava fora.</p>',
+      buttons: buttons });
     // botão "voltar" do Android equivale a Coletar (o valor base já foi creditado)
     modalStack[modalStack.length - 1].closable = true;
   };
+
+  // Reduzir animações / texto maior (preferências de acessibilidade)
+  UI.applySettings = function () {
+    var st = G.s.settings, b = document.body;
+    var sysReduce = !!(root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    cls(b, 'reduce-motion', st.reduceMotion || sysReduce);
+    cls(b, 'big-text', st.bigText);
+  };
+  UI.reduceMotion = function () { return document.body.classList.contains('reduce-motion'); };
 
   // ---------- montagem e atualização ----------
   UI.build = function () {
     fxRoot = document.getElementById('fx');
     buildHud(); buildTabs();
-    buildHome(); buildBiz(); buildInv(); buildLux(); buildMore();
+    buildHome(); buildBiz(); buildInv(); buildLux(); buildMore(); buildLocked();
+    UI.applySettings();
     UI.go('home');
   };
 
   UI.update = function () {
     updateHud();
-    var sc = UI.screens[UI.tab];
+    var sc = UI.screens[shownScreen()];
     if (sc && sc.update) sc.update();
     // indicadores nas abas
     var s = G.s;
@@ -906,11 +1129,13 @@
     cls(tabBtns.biz, 'alert', bizAlert && UI.tab !== 'biz');
     cls(tabBtns.more, 'alert', !!s.tour.pending || (E.potentialStars(s) >= Math.max(1, Math.ceil(s.stars * 0.5)) && E.potentialStars(s) > 0));
     var nextJob = D.JOBS[s.jobs];
-    cls(tabBtns.home, 'alert', UI.tab !== 'home' && !!nextJob && s.cash >= nextJob.cost);
+    var dailyReady = !!s.daily && (G.dailyBonusReady() || s.daily.list.some(function (m) { return !m.claimed && G.dailyProgress(m).done; }));
+    cls(tabBtns.home, 'alert', UI.tab !== 'home' && ((!!nextJob && s.cash >= nextJob.cost) || dailyReady));
+    Object.keys(D.UNLOCKS).forEach(function (k) { cls(tabBtns[k], 'locked', !G.isUnlocked(k)); });
   };
 
   UI.frame = function () {
-    var sc = UI.screens[UI.tab];
+    var sc = UI.screens[shownScreen()];
     if (sc && sc.frame) sc.frame();
   };
 })(this);

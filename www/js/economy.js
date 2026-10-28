@@ -49,9 +49,13 @@
     return m;
   };
 
+  // Bônus permanente das conquistas (+1% por conquista)
+  E.achCount = function (s) { return s.ach ? Object.keys(s.ach).length : 0; };
+  E.achMult = function (s) { return 1 + D.ACH_BONUS * E.achCount(s); };
+
   // Multiplicador global de renda dos negócios
   E.globalMult = function (s, now, noTemp) {
-    return E.starMult(s) *
+    return E.starMult(s) * E.achMult(s) *
       (1 + E.luxBonus(s, 'inc') + D.COLLECTION_BONUS * E.completedCollections(s)) *
       (noTemp ? 1 : E.tempMult(s, now));
   };
@@ -109,8 +113,9 @@
   E.bizMaxBuy = function (s, id, cash) {
     var b = BIZ[id], lvl = s.biz[id] ? s.biz[id].lvl : 0;
     var first = b.cost * Math.pow(b.r, lvl) * E.costDiscount(s);
-    if (cash < first) return 0;
-    return Math.floor(Math.log(cash * (b.r - 1) / first + 1) / Math.log(b.r));
+    if (!(cash >= first) || !isFinite(first)) return 0;
+    var k = Math.floor(Math.log(cash * (b.r - 1) / first + 1) / Math.log(b.r));
+    return isFinite(k) ? Math.min(k, D.MAX_BUY_PER_TAP, D.MAX_BIZ_LVL - lvl) : D.MAX_BUY_PER_TAP;
   };
 
   E.empCost = function (s, id) {

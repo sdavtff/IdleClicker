@@ -283,3 +283,91 @@ textarea { width: 100%; min-height: 80px; border-radius: 10px; background: rgba(
   #tapBtn { width: 150px; height: 150px; }
   #goals { display: none; }
 }
+
+/* =====================================================================
+   v1.1 — novos componentes, acessibilidade e refinamentos
+   ===================================================================== */
+
+/* foco visível para teclado/leitores (não aparece no toque) */
+button:focus-visible, textarea:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+.muted { color: #c2b8e6; } /* contraste ≥ 4.5:1 sobre os cartões */
+.note { text-align: center; margin: 0 0 10px; }
+
+/* tela de carregamento */
+#loading {
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 100;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  background: radial-gradient(120% 70% at 50% 30%, #3b1f7a, var(--bg0));
+}
+.load-coin { width: 96px; height: 96px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff7cc, #ffd34d 30%, #ffad1f 65%, #d9730b); box-shadow: 0 0 40px rgba(255, 180, 40, 0.5); animation: loadSpin 1.4s ease-in-out infinite; }
+@keyframes loadSpin { 50% { transform: scaleX(0.15); } }
+.load-title { font-size: 28px; font-weight: 900; color: var(--gold); }
+.load-sub { color: var(--muted); font-size: 14px; }
+.boot-error { max-width: 320px; text-align: center; padding: 20px; }
+.boot-error p { color: var(--muted); }
+
+/* abas: bloqueio e desbloqueio */
+#tabbar button.locked { opacity: 0.55; }
+#tabbar button.locked .ti::after { content: '🔒'; font-size: 11px; position: absolute; margin-left: -6px; margin-top: 14px; }
+#tabbar button.unlock-pop .ti { animation: unlockPop 0.9s ease-out 2; }
+@keyframes unlockPop { 40% { transform: scale(1.5) rotate(-8deg); } }
+
+/* estado vazio / bloqueado */
+.empty-state { text-align: center; padding: 28px 18px; margin-top: 30px; }
+.empty-state h3 { margin: 6px 0; font-size: 20px; }
+.lock-ico { font-size: 44px; letter-spacing: -6px; }
+.lock-req { font-size: 13px; font-weight: 700; color: var(--gold); margin: 14px 0 6px; }
+.bar.big { height: 10px; margin: 0 0 16px; }
+.empty-state .btn { min-width: 200px; }
+
+/* missões diárias */
+.daily { border-color: rgba(76, 201, 240, 0.35); }
+.mission { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.mission:last-of-type { border-bottom: 0; margin-bottom: 8px; }
+.mico { flex: 0 0 auto; width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; font-size: 20px; background: rgba(255, 255, 255, 0.08); }
+.mtxt { font-size: 14px; font-weight: 700; }
+.mission .bar { margin: 5px 0 3px; }
+.mission.claimed { opacity: 0.6; }
+.mbtn { min-width: 84px; min-height: 44px; font-size: 12px; }
+.btn.ready { animation: readyPulse 1.2s ease-in-out infinite; }
+@keyframes readyPulse { 50% { box-shadow: 0 3px 0 #b8640b, 0 0 0 6px rgba(255, 201, 60, 0.25); } }
+
+/* segmentado com ícones (aba Mais) */
+.seg-icons button { white-space: pre-line; line-height: 1.15; font-size: 11px; min-height: 48px; padding: 2px 0; }
+
+/* conquistas */
+.ach-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.ach { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 14px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line); }
+.ach-ico { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-size: 24px; background: rgba(0, 0, 0, 0.25); filter: grayscale(1); opacity: 0.6; }
+.ach.done { border-color: rgba(255, 201, 60, 0.45); background: linear-gradient(90deg, rgba(255, 201, 60, 0.12), rgba(255, 255, 255, 0.04)); }
+.ach.done .ach-ico { filter: none; opacity: 1; }
+.ach.done .bar > i { background: linear-gradient(90deg, var(--gold), var(--gold2)); }
+
+/* torneio: etiqueta de simulado */
+.sim-tag { display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: 0.3px; color: #9fe7ff; background: rgba(76, 201, 240, 0.15); border: 1px solid rgba(76, 201, 240, 0.35); border-radius: 6px; padding: 1px 6px; margin: 3px 0; }
+
+/* backups */
+.bak-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.bak-row:last-child { border-bottom: 0; }
+
+/* resumo offline */
+.kv.left { text-align: left; background: rgba(0, 0, 0, 0.2); border-radius: 12px; padding: 10px 12px; }
+
+/* ---------- acessibilidade: reduzir animações ---------- */
+body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after {
+  animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important;
+}
+body.reduce-motion #tapBtn::after { animation: none; }
+body.reduce-motion .float { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  #tapBtn::after, .load-coin, .biz .ico.idle, .lux.own .big, .btn.ready { animation: none; }
+}
+
+/* ---------- acessibilidade: texto maior ---------- */
+body.big-text .muted, body.big-text .small, body.big-text .goal .gt { font-size: 14px; }
+body.big-text .title, body.big-text .mtxt { font-size: 17px; }
+body.big-text .btn { font-size: 15px; }
+body.big-text .btn small { font-size: 12px; }
+body.big-text #tabbar button { font-size: 12.5px; }
+body.big-text .seg-icons button { font-size: 12px; }
+body.big-text .goal .gt { height: auto; -webkit-line-clamp: 3; }

@@ -50,7 +50,21 @@
     });
     G.on('news', function (n) {
       if (UI.tab === 'inv' || (G.s.hold[n.id] && G.s.hold[n.id].qty > 0))
-        UI.toast((n.up ? '🟢 ' : '🔴 ') + n.txt, 'info', function () { UI.go('inv'); }, 4000);
+        UI.toast((n.up ? '🟢 ' : '🔴 ') + UI.esc(n.txt), 'info', function () { UI.go('inv'); }, 4000);
+    });
+    G.on('ach', function (a) {
+      root.Sfx.big();
+      UI.toast(a.icon + ' Conquista: <b>' + a.name + '</b> · +1% de receita permanente', 'good', function () { UI.moreTab = 'ach'; UI.go('more'); }, 4500);
+    });
+    G.on('unlock', function (k) {
+      root.Sfx.big();
+      var names = { inv: '📈 Investimentos', lux: '💎 Luxo & Coleção' };
+      UI.toast('🔓 Nova área desbloqueada: <b>' + names[k] + '</b>!', 'good', function () { UI.go(k); }, 5000);
+      var b = UI.tabButton(k);
+      if (b) { b.classList.remove('unlock-pop'); void b.offsetWidth; b.classList.add('unlock-pop'); }
+    });
+    G.on('saveError', function () {
+      UI.toast('⚠️ Não foi possível salvar no aparelho (armazenamento cheio ou bloqueado). Exporte seu save em Mais › Ajustes.', 'bad', null, 7000);
     });
     G.on('bizPay', UI.bizPay);
     G.on('tourEnd', function (p) {
@@ -63,24 +77,33 @@
     while (sec > 0) { var d = Math.min(0.5, sec); G.tick(d); sec -= d; }
   }
 
+  function offlineCheck() {
+    var off = G.computeOffline();
+    if (off) UI.showOffline(off);
+    else if (G.clockBack && !Game._clockWarned) {
+      Game._clockWarned = true;
+      UI.toast('🕒 O relógio do aparelho voltou no tempo. Ganhos offline voltam a contar quando ele passar do último horário registrado.', 'info', null, 7000);
+    }
+  }
+
   function resume() {
     var gap = (Date.now() - G.s.lastSeen) / 1000;
-    if (gap > 60) {
-      var off = G.computeOffline();
-      if (off) UI.showOffline(off);
-    } else if (gap > 0.5) catchUp(gap);
-    G.s.lastSeen = Date.now();
+    if (gap > 60 || gap < -120) offlineCheck();
+    else if (gap > 0.5) catchUp(gap);
+    G.touch(Date.now());
+    G.save();
     last = performance.now();
   }
 
   var last = 0, uiAcc = 0, saveAcc = 0;
   function frame(t) {
     // o app voltou de segundo plano antes do evento visibilitychange: aplica o tempo ausente
-    if (Date.now() - G.s.lastSeen > 2000) { resume(); t = last; }
+    var gapMs = Date.now() - G.s.lastSeen;
+    if (gapMs > 2000 || gapMs < -120000) { resume(); t = last; }
     var dt = Math.min(0.5, Math.max(0, (t - last) / 1000));
     last = t;
     G.tick(dt);
-    G.s.lastSeen = Date.now();
+    G.touch(Date.now());
     UI.frame();
     uiAcc += dt; saveAcc += dt;
     if (uiAcc >= 0.2) { uiAcc = 0; UI.update(); root.Tutorial.update(); }
@@ -102,22 +125,35 @@
     App.addListener('resume', function () { resume(); });
   }
 
+  function loadNotice(res) {
+    if (res.status === 'recovered') {
+      UI.modal({ icon: '🩹', title: 'Save recuperado', html:
+        '<p>Seu save principal estava danificado (' + UI.esc(res.error) + '). Restauramos o <b>backup automático</b> mais recente.</p>' +
+        '<p class="muted small">A cópia danificada foi guardada em Mais › Ajustes › Backups locais.</p>' });
+    } else if (res.status === 'failed') {
+      UI.modal({ icon: '⚠️', title: 'Não foi possível ler o save', html:
+        '<p>' + UI.esc(res.error) + '</p><p>Um novo jogo foi iniciado. <b>O save original não foi apagado</b>: está em Mais › Ajustes › Backups locais, para você copiar ou tentar de novo depois de atualizar o jogo.</p>' });
+    }
+  }
+
   function boot() {
-    var had = G.load();
+    var res = G.load();
     root.Sfx.setEnabled(G.s.settings.sound);
     Game._col = root.E.completedCollections(G.s);
     UI.build();
     wireEvents();
     G.checkTournament(Date.now());
-    if (had) {
-      var off = G.computeOffline();
-      if (off) UI.showOffline(off);
-    }
+    G.ensureDaily(Date.now());
+    if (res.status === 'ok' || res.status === 'recovered') offlineCheck();
+    loadNotice(res);
     if (G.s.tour.pending) setTimeout(function () { UI.toast('🏆 Prêmio do torneio esperando por você!', 'good', function () { UI.moreTab = 'tour'; UI.go('more'); }, 6000); }, 1500);
-    G.s.lastSeen = Date.now();
+    G.touch(Date.now());
+    // não sobrescreve o save principal ilegível antes de guardar a cópia (G.load já guardou em KEYS.bad)
     G.save();
     UI.update();
     root.Tutorial.start();
+    var loading = document.getElementById('loading');
+    if (loading) loading.remove();
 
     document.addEventListener('visibilitychange', function () {
       if (document.hidden) G.save(); else resume();
@@ -129,6 +165,25 @@
     requestAnimationFrame(frame);
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
-  else boot();
+  // Falha inesperada no boot: mostra uma tela amigável em vez de uma tela vazia.
+  function safeBoot() {
+    try { boot(); } catch (e) {
+      if (root.console) console.error(e);
+      var el = document.getElementById('loading');
+      if (el) {
+        el.classList.add('error');
+        el.innerHTML = '';
+        var box = document.createElement('div');
+        box.className = 'boot-error';
+        var t = document.createElement('h3'); t.textContent = 'Algo deu errado ao abrir o jogo';
+        var p = document.createElement('p'); p.textContent = 'Seu progresso não foi apagado. Tente abrir de novo. (' + (e && e.message ? e.message : e) + ')';
+        var b = document.createElement('button'); b.className = 'btn'; b.textContent = 'Tentar de novo';
+        b.onclick = function () { location.reload(); };
+        box.appendChild(t); box.appendChild(p); box.appendChild(b);
+        el.appendChild(box);
+      }
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', safeBoot);
+  else safeBoot();
 })(this);

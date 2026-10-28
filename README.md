@@ -5,7 +5,8 @@ Comece tocando na moeda sem um centavo, arrume um emprego, abra negócios, contr
 em cripto e em imóveis, colecione carros, iates, jatos, relógios e arte, dispute o torneio semanal e funde seu **Legado**.
 
 - 100% offline · save automático no aparelho · ganhos offline (até 4 h, ampliáveis)
-- Anúncios **somente voluntários** (recompensados) · compra única remove anúncios de verdade
+- Sem anúncios forçados · nesta versão não há anúncios nem compras (bônus gratuitos com recarga)
+- Conquistas, missões diárias, desbloqueio progressivo, backups automáticos do save
 - Mundo, nomes, logo e arte **originais**
 
 | Documento | Conteúdo |
@@ -105,7 +106,9 @@ Depois: `./gradlew assembleRelease` (APK) ou `./gradlew bundleRelease` (AAB para
 | Comando | O que faz |
 |---|---|
 | `npm run balance` | Simula 2 h de jogo com o código real e imprime a tabela de balanceamento |
-| `npm test` | Teste automatizado no Chromium com tela de celular (toque, compras, abas, save, offline, rotação) — requer `npm i -D playwright && npx playwright install chromium` |
+| `npm test` | Testes unitários (Node, sem dependências): compras, upgrades, produção, funcionários, despesas, offline, relógio, Legado, missões, conquistas, save, importação maliciosa, formatação |
+| `npm run test:e2e` | Teste de ponta a ponta no Chromium com tela de celular (36 verificações) — requer `npm i -D playwright && npx playwright install chromium` |
+| `node tools/balance-sim.js 480 3 prestige` | Simula 8 h com Legado e aborta se encontrar NaN/Infinity/saldo negativo |
 | `node tools/gen-icons.js` | Regenera ícones e splash do Android a partir de `www/assets/icon.svg` |
 
 ## 🗂️ Estrutura
@@ -121,6 +124,12 @@ docs/           design, balanceamento, roadmap
 ```
 
 ## 💸 Sobre anúncios e compras nesta versão
-Para manter o jogo **100% offline**, `www/js/ads.js` traz implementações de demonstração:
-o "anúncio" é uma tela de 5 s que diz claramente que é uma demonstração, e a compra "Remover anúncios" é simulada (nada é cobrado).
-Para publicar, troque essas duas funções pelos SDKs reais (AdMob Rewarded e Google Play Billing). Veja `docs/ROADMAP.md`.
+Nenhum SDK de anúncios ou de pagamentos está integrado, então **o jogo não mostra anúncios e não vende nada** —
+e também não finge: não há tela de anúncio simulada nem compra simulada. Os bônus (Turbo x2 e Lucro rápido) são
+gratuitos, com tempo de recarga. Para integrar AdMob/Google Play Billing, registre provedores reais em
+`www/js/ads.js` (`AdService.setProvider` / `Store.setProvider`); veja `docs/ROADMAP.md`.
+
+## 💾 Save e backups
+O progresso fica no aparelho (salvo a cada 10 s e ao sair). Todo save carregado ou importado é validado campo a campo.
+Se o save principal se corromper, o backup automático é restaurado e a cópia danificada é guardada.
+Em **Mais › Ajustes** dá para exportar/importar (com confirmação) e restaurar backups locais.

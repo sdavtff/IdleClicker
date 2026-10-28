@@ -12,6 +12,7 @@ const F = require(js('fmt.js'));
 
 const MINUTES = +process.argv[2] || 120;
 const TPS = +process.argv[3] || 3; // toques/segundo de um jogador ativo
+const PRESTIGE = process.argv[4] === 'prestige'; // funda Legado quando as estrelas novas >= max(5, estrelas atuais)
 
 let seed = 12345;
 G.rng = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
@@ -20,9 +21,10 @@ G.now = () => clock;
 G.s = G.newState();
 G.s.nextEventAt = Infinity; // eventos aleatórios desligados para resultado reprodutível
 G.s.nextNewsAt = Infinity;
-const s = G.s;
+let s = G.s;
 
-const marks = new Set([1, 2, 3, 5, 10, 15, 20, 30, 45, 60, 75, 90, 105, 120].filter(m => m <= MINUTES));
+const marks = new Set((MINUTES > 120 ? Array.from({ length: Math.floor(MINUTES / 30) }, (_, i) => (i + 1) * 30)
+  : [1, 2, 3, 5, 10, 15, 20, 30, 45, 60, 75, 90, 105, 120]).filter(m => m <= MINUTES));
 const rows = [];
 const firsts = [];
 const seen = new Set();
@@ -99,6 +101,15 @@ for (let t = 1; t <= totalSec; t++) {
   D.PROPS.forEach(p => { if (s.props[p.id]) note('prop' + p.id, 'Imóvel ' + p.name, t); });
   D.LUXURY.forEach(l => { if (s.lux[l.id]) note('lux' + l.id, 'Luxo ' + l.name, t); });
   if (E.potentialStars(s) >= 1) note('star', 'Prestígio disponível (1ª estrela)', t);
+  // resgata missões diárias concluídas (como um jogador faria)
+  if (s.daily) { s.daily.list.forEach((m, i) => G.claimDaily(i)); G.claimDailyBonus(); }
+  if (PRESTIGE && E.potentialStars(s) >= Math.max(5, s.stars)) {
+    const g = G.prestige();
+    s = G.s; s.nextEventAt = Infinity; s.nextNewsAt = Infinity;
+    firsts.push([t, 'Legado #' + s.prestiges + ' (+' + g + ' ⭐, total ' + s.stars + ')']);
+  }
+  const bad = [s.cash, s.lifetimeEarned, E.netWorth(s), E.passiveIncome(s, clock)].some(v => !Number.isFinite(v) || v < 0);
+  if (bad) { console.error('ERRO: número inválido no segundo ' + t); process.exit(1); }
   if (t % 60 === 0 && marks.has(t / 60)) {
     const now = clock;
     rows.push({
@@ -110,14 +121,14 @@ for (let t = 1; t <= totalSec; t++) {
       nw: E.netWorth(s),
       biz: D.BUSINESSES.filter(b => s.biz[b.id].lvl > 0).map(b => b.icon + s.biz[b.id].lvl).join(' '),
       mgr: E.mgrCount(s), jobs: s.jobs,
-      stars: E.potentialStars(s)
+      stars: E.potentialStars(s), owned: s.stars, ach: Object.keys(s.ach).length
     });
   }
 }
 
 const pad = (x, n) => String(x).padEnd(n);
-console.log('| Min | Faturado (total) | Renda passiva/s | Valor do toque | Patrimônio | Gerentes | Empregos | Estrelas | Negócios (nível) |');
-console.log('|---:|---:|---:|---:|---:|---:|---:|---:|---|');
-rows.forEach(r => console.log(`| ${r.min} | ${F.money(r.earned)} | ${F.money(r.ips)} | ${F.money(r.tap)} | ${F.money(r.nw)} | ${r.mgr} | ${r.jobs} | ${r.stars} | ${r.biz} |`));
+console.log('| Min | Faturado (vida) | Renda passiva/s | Valor do toque | Patrimônio | Gerentes | Empregos | ⭐ disponíveis | ⭐ ativas | Conquistas | Negócios (nível) |');
+console.log('|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|');
+rows.forEach(r => console.log(`| ${r.min} | ${F.money(r.earned)} | ${F.money(r.ips)} | ${F.money(r.tap)} | ${F.money(r.nw)} | ${r.mgr} | ${r.jobs} | ${r.stars} | ${r.owned} | ${r.ach} | ${r.biz} |`));
 console.log('\nMarcos (primeira vez):');
 firsts.forEach(([t, l]) => console.log(`- ${F.time(t)} — ${l}`));

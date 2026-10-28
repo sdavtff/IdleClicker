@@ -82,7 +82,7 @@ function check(name, ok, info) { results.push({ name, ok: !!ok, info }); console
   await page.locator('#tabbar [data-tab=home]').click();
   await wait(200);
   check('Cartão de missões diárias com 3 missões', await page.locator('#dailyCard .mission:visible').count() === 3);
-  await page.evaluate(() => { G.s.daily.list.forEach(m => { const d = D.DAILY_BY_ID[m.id]; if (d.stat === 'earned') G.s.lifetimeEarned += m.target; else G.s.stats[d.stat] += m.target; }); UI.update(); });
+  await page.evaluate(() => { G.s.daily.list.forEach(m => { const d = D.DAILY_BY_ID[m.id]; G.s.stats[d.stat === 'earned' ? 'prodEarned' : d.stat] += m.target; }); UI.update(); });
   for (let i = 0; i < 3; i++) await page.locator('#dailyCard .mbtn').nth(i).click();
   await page.locator('#dailyBonus').click();
   await wait(200);

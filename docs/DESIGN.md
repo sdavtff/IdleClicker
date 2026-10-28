@@ -54,19 +54,30 @@ Tocar → $ → comprar emprego/habilidade → $ por toque maior
 | **Imóveis** | 5 imóveis compráveis várias vezes (custo ×1,12–1,14). Aluguel contínuo, inclusive offline; manutenção 10% |
 | **Luxo & coleção** | 13 itens em 5 categorias (relógios, carros, iates, jatos, arte). Cada item dá status e bônus (renda, toque, aluguel, velocidade, horas offline). Categoria completa = +5% renda global. Itens são permanentes (sobrevivem ao Legado) |
 | **Finanças** | Painel de receitas (negócios, salário, aluguéis), despesas (funcionários, manutenção), resultado líquido/s e patrimônio (dinheiro, carteira, ativos) |
-| **Torneio semanal** | Semana de segunda a domingo (horário de Brasília). Pontuação = lucro realizado na bolsa. 9 rivais simulados localmente (determinísticos por semana, escalam com o patrimônio). Prêmios: dinheiro + Turbo x1,5 |
+| **Torneio semanal** | Semana de segunda a domingo (horário de Brasília). Pontuação = lucro realizado na bolsa. **9 rivais simulados localmente** (determinísticos por semana, escalam com o patrimônio) — a interface indica "rivais simulados"; não há multiplayer nem servidor. Prêmios: dinheiro + Turbo x1,5 |
 | **Legado (prestígio)** | Estrelas = ⌊√(faturamento total ÷ 100 M)⌋ − estrelas já recebidas. Cada estrela: +10% de renda permanente |
-| **Offline** | Ao voltar: renda passiva líquida (gerentes + salário + aluguel − despesas) × tempo fora, limitado a 4 h (+1 h por nível de Sono Produtivo, +1 h com a obra *Aurora sobre Cifrópolis*). Opção voluntária de dobrar |
+| **Offline** | Ao voltar: renda passiva líquida (gerentes + salário + aluguel − despesas) × tempo fora, limitado a 4 h (+1 h por nível de Sono Produtivo, +1 h com a obra *Aurora sobre Cifrópolis*). O resumo mostra cada fonte. O tempo é medido a partir do maior horário já visto (`clockMax`): adiantar o relógio, coletar e voltar não rende de novo. Dobrar só existe com anúncio real concluído ou com a compra de remover anúncios |
 | **Metas** | 3 trilhas (31 curtas, 17 médias, 9 longas, depois geradas infinitamente). Cada meta paga um prêmio proporcional à renda (limitado a uma fração do patrimônio) |
+| **Conquistas** (v1.1) | 31 conquistas permanentes (toques, carreira, negócios, gerentes, níveis, equipe, faturamento, renda, bolsa, imóveis, luxo, crises resolvidas, missões, torneio, Legado). Cada uma: +1% de receita dos negócios, mantida no Legado |
+| **Missões diárias** (v1.1) | 3 por dia, sorteadas de forma determinística pela data entre 8 modelos (só os já disponíveis ao jogador), com alvo escalado ao progresso. Prêmio calculado no resgate; baú ao concluir as 3, com bônus de sequência de dias. Relógio atrasado não gera dia novo |
+| **Desbloqueio progressivo** (v1.1) | Investir abre ao faturar $3 K e Luxo ao faturar $15 K; a aba bloqueada mostra o que oferece, o requisito e uma barra de progresso. Saves antigos que já passaram do requisito mantêm o acesso |
 
 ## 5. Monetização justa (diferencial)
 
 - **Só anúncios recompensados voluntários**, em 3 pontos: Turbo x2 por 30 min (acumula até 4 h), Lucro rápido (10 min de renda, recarga de 15 min) e Dobrar ganhos offline.
 - **Nenhum** intersticial, nenhum anúncio no meio do jogo, nenhum pop-up de compra repetido.
-- **Compra única "Remover anúncios"**: as mesmas recompensas ficam instantâneas, sem vídeo. Remove os anúncios de verdade.
+- **Compra única "Remover anúncios"**: os mesmos bônus ficam instantâneos, sem vídeo.
 - **100% funcional offline** (save local, rivais do torneio simulados no aparelho).
-- **Publicidade honesta**: vídeos e capturas da loja devem usar gravações reais do jogo (a pasta de screenshots do teste automatizado já serve de base).
-- Nesta versão, `AdService` e `Store` (em `www/js/ads.js`) são *stubs* de demonstração que simulam o vídeo e a compra; a interface `Promise<boolean>` está pronta para plugar AdMob Rewarded + Google Play Billing.
+- **Publicidade honesta**: vídeos e capturas da loja devem usar gravações reais do jogo.
+
+**Estado na v1.1:** nenhum SDK de anúncios ou de pagamentos está integrado. Por isso:
+- não existe tela de anúncio falsa nem compra simulada;
+- `AdService.available()` e `Store.available()` retornam `false` (`www/js/ads.js`);
+- os bônus funcionam de graça com tempo de recarga (Turbo gratuito: 30 min de duração, 30 min de recarga, sem acumular);
+- o botão de "dobrar offline" e a loja ficam ocultos; a tela de Ajustes explica isso ao jogador;
+- a recompensa só é concedida quando o provedor real retorna `true` (anúncio assistido até o fim); falha ou cancelamento não dá nada.
+
+Para integrar, implemente `AdService.setProvider({ showRewarded })` e `Store.setProvider({ buy, restore })` com os plugins reais.
 
 ## 6. UX e arte
 
@@ -97,16 +108,19 @@ IdleClicker/
 │       ├── data.js           ← TODO o conteúdo e constantes de balanceamento
 │       ├── economy.js        ← fórmulas puras (custos, receitas, multiplicadores, patrimônio)
 │       ├── market.js         ← bolsa/cripto (passeio aleatório) e torneio semanal
-│       ├── game.js           ← estado, ações, laço de simulação, eventos, metas, offline, prestígio, save
+│       ├── save.js           ← validação campo a campo, migração de versões, (de)codificação de backups
+│       ├── game.js           ← estado, ações, laço, eventos, metas, conquistas, missões, offline, prestígio, save/backups
 │       ├── audio.js          ← efeitos sonoros sintetizados
 │       ├── ads.js            ← AdService (recompensado voluntário) e Store (remover anúncios) — stubs
 │       ├── ui.js             ← interface: HUD, abas, telas, toasts, modais, efeitos
 │       ├── tutorial.js       ← tutorial de 1 minuto
 │       └── main.js           ← boot, laço requestAnimationFrame, autosave, offline, botão voltar
 ├── android/                  ← projeto nativo gerado pelo Capacitor (Gradle)
+├── tests/
+│   └── game.test.js          ← testes unitários (node:test, sem dependências)
 ├── tools/
-│   ├── balance-sim.js        ← simulador: joga 2 h com o código real e gera a tabela
-│   ├── smoke-test.js         ← teste automatizado no Chromium com viewport de celular
+│   ├── balance-sim.js        ← simulador: joga 2 h (ou mais, com Legado) com o código real e gera a tabela
+│   ├── smoke-test.js         ← teste de ponta a ponta no Chromium com viewport de celular
 │   └── gen-icons.js          ← gera ícones e splash do Android a partir do SVG
 ├── docs/                     ← design, balanceamento, próximos passos
 ├── capacitor.config.json
@@ -115,7 +129,10 @@ IdleClicker/
 
 **Arquitetura**
 - `game.js`, `economy.js`, `market.js`, `data.js` e `fmt.js` não tocam no DOM: rodam no navegador e no Node.
-- Simulação em `requestAnimationFrame` com `dt` limitado; a UI atualiza a cada 200 ms, alterando os elementos no lugar (sem recriar o DOM, para que nenhum toque se perca); as barras de progresso atualizam a cada frame via `transform`.
-- **Save**: `localStorage` (persistente no WebView do Capacitor), salvo a cada 10 s, ao pausar ou minimizar o app e ao sair. O save tem versão e é mesclado com o estado padrão, então novos campos não quebram saves antigos. Também dá para exportar e importar o save em texto (Base64).
+- Simulação em `requestAnimationFrame` com `dt` limitado; verificações pesadas (metas, conquistas, desbloqueios, torneio, missões) rodam 4×/s, não a cada frame. A UI atualiza a cada 200 ms só na tela visível, alterando os elementos no lugar (sem recriar o DOM, para que nenhum toque se perca); as barras de progresso atualizam a cada frame via `transform`. Medido: `UI.update` ≈ 0,1 ms no Chromium de desktop; 400 toques seguidos não deixam elementos órfãos.
+- **Save**: `localStorage` (persistente no WebView do Capacitor), salvo a cada 10 s, ao pausar ou minimizar o app e ao sair.
+- **Segurança do save (v1.1)**: todo save carregado ou importado passa por `SaveIO.sanitize`, que reconstrói o estado campo a campo com tipo, faixa e padrão seguros, aceita só IDs conhecidos (sem poluição de protótipo), limita estrelas ao que o faturamento permite e recusa versões futuras. Texto vindo do save (notícias) é escapado antes de ir para o HTML.
+- **Backups**: `_auto` (último save bom, a cada 5 min e no carregamento), `_preimport` (antes de importar, restaurar ou apagar) e `_corrupt` (cópia intacta de um save ilegível — nunca é apagado sem cópia). Se o save principal falhar, o automático é restaurado e o jogador é avisado. Tudo restaurável em Ajustes › Backups locais.
+- **Migração**: `SAVE_VERSION = 2`; `SaveIO.migrate` aplica migrações em sequência (v1 → v2 só adiciona campos com padrão).
 - **Offline**: `lastSeen` é gravado em todo save; no boot ou ao voltar ao app calcula-se o tempo ausente (pausas curtas, de até 60 s, são simuladas em tempo real).
 - **Android**: retrato travado, `adjustMarginsForEdgeToEdge: auto` (Android 15), botão voltar fecha modal → volta para Início → minimiza o app (`@capacitor/app`).

@@ -328,7 +328,7 @@ test('missões diárias: 3 por dia, progresso, resgate, baú e virada do dia', (
   // força a conclusão de todas pelo estado de estatísticas
   s.daily.list.forEach((m) => {
     const d = D.DAILY_BY_ID[m.id];
-    if (d.stat === 'earned') s.lifetimeEarned += m.target; else s.stats[d.stat] += m.target;
+    s.stats[d.stat === 'earned' ? 'prodEarned' : d.stat] += m.target;
   });
   const c0 = s.cash;
   [0, 1, 2].forEach((i) => assert.ok(G.claimDaily(i) > 0));
@@ -529,4 +529,26 @@ test('sessão longa simulada (2 h de jogo) mantém todos os números finitos', (
   nums.forEach((v) => assert.ok(Number.isFinite(v) && v >= 0, String(v)));
   assert.ok(s.lifetimeEarned > 1e6, 'progrediu');
   assert.ok(Object.keys(s.ach).length >= 5, 'conquistas destravadas');
+});
+
+test('prêmios não contam como faturamento produtivo (missão "Fature" não se autoalimenta)', () => {
+  const s = fresh();
+  const p0 = s.stats.prodEarned;
+  G.earnReward(1e6);
+  assert.equal(s.stats.prodEarned, p0);
+  assert.equal(s.lifetimeEarned, 1e6, 'mas conta para o faturamento total e o Legado');
+  G.tap();
+  assert.ok(s.stats.prodEarned > p0);
+});
+
+test('cartão do negócio: receita líquida por ciclo bate com o dinheiro recebido em produção manual', () => {
+  const s = fresh({ cash: 1e9 });
+  noRewards(s);
+  G.buyBiz('pixel', 10); G.hireEmployee('pixel'); G.hireEmployee('pixel');
+  const T = E.bizTime(s, 'pixel');
+  const net = E.bizRevenue(s, 'pixel', clock) - E.bizUpkeep(s, 'pixel') * T;
+  const c0 = s.cash;
+  G.runBiz('pixel');
+  advance(T + 0.5);
+  close(s.cash - c0, net, 0.02);
 });

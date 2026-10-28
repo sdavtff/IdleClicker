@@ -287,7 +287,7 @@
       txt(x.ico, p.def.icon);
       txt(x.txt, G.dailyText(m));
       x.bar.style.width = (m.claimed ? 100 : p.frac * 100).toFixed(1) + '%';
-      txt(x.sub, m.claimed ? 'Prêmio resgatado' : (isMoney ? F.money(p.cur) + ' / ' + F.money(p.target) : F.num(p.cur) + ' / ' + F.num(p.target)) + ' · prêmio ' + F.money(m.reward));
+      txt(x.sub, m.claimed ? 'Resgatado: +' + F.money(m.reward) : (isMoney ? F.money(p.cur) + ' / ' + F.money(p.target) : F.num(p.cur) + ' / ' + F.num(p.target)) + ' · prêmio ' + F.money(G.dailyReward(m)));
       cls(x.el, 'claimed', m.claimed);
       if (m.claimed) { btnLabel(x.btn, '✓'); cls(x.btn, 'done', true); cls(x.btn, 'off', false); cls(x.btn, 'ready', false); }
       else if (p.done) { btnLabel(x.btn, 'Resgatar'); cls(x.btn, 'done', false); cls(x.btn, 'off', false); cls(x.btn, 'ready', true); }
@@ -515,7 +515,7 @@
           if (st.emp >= D.EMP_MAX) { btnLabel(c.emp, '👥 Equipe', 'completa'); cls(c.emp, 'off', false); }
           else { var ec = E.empCost(s, b.id); btnLabel(c.emp, '👥 ' + st.emp + '/' + D.EMP_MAX, F.money(ec)); cls(c.emp, 'off', s.cash < ec); }
           var producing = st.mgr || st.running;
-          var rev = E.bizRevenue(s, b.id, now), T = E.bizTime(s, b.id);
+          var T = E.bizTime(s, b.id), rev = E.bizRevenue(s, b.id, now) - E.bizUpkeep(s, b.id) * T; // líquido de salários
           txt(c.ptxt, producing || st.mgr ? F.money(rev, true) + ' a cada ' + (T < 10 ? T.toFixed(1).replace('.', ',') + 's' : F.time(T))
             : '▶ Toque no ícone para produzir ' + F.money(rev, true));
           cls(c.ico, 'idle', !producing);
@@ -961,6 +961,7 @@
       }
       if (t === 'fin') {
         var b = E.breakdown(s, now), pv = E.portfolioValue(s), nw = E.netWorth(s);
+        var manual = D.BUSINESSES.filter(function (x) { return s.biz[x.id].lvl > 0 && !s.biz[x.id].mgr; }).length;
         html(r.finInc, '<div class="kv">' +
           '<span>🏪 Negócios automatizados</span><b class="pos">+' + F.money(b.biz, true) + '</b>' +
           '<span>💼 Salário (carreira)</span><b class="pos">+' + F.money(b.salary, true) + '</b>' +
@@ -969,8 +970,10 @@
           '<span>🔧 Manutenção de imóveis</span><b class="neg">' + (b.rentUpkeep > 0 ? '-' : '') + F.money(b.rentUpkeep, true) + '</b>' +
           '<span><b>Resultado líquido</b></span><b class="' + (b.net >= 0 ? 'pos' : 'neg') + '">' + F.money(b.net, true) + '/s</b>' +
           '<span>👆 Valor do toque</span><b>' + F.money(E.tapValue(s, now), true) + '</b>' +
-          '<span>⚡ Multiplicador global</span><b>x' + E.globalMult(s, now).toFixed(2).replace('.', ',') + '</b></div>' +
-          '<div class="muted" style="margin-top:6px">Negócios sem gerente só rendem quando você toca neles. Funcionários só recebem enquanto produzem.</div>');
+          '<span>⚡ Multiplicador global</span><b>x' + E.globalMult(s, now).toFixed(2).replace('.', ',') + '</b>' +
+          '<span>🏅 Conquistas</span><b>+' + Math.round(E.achCount(s) * D.ACH_BONUS * 100) + '%</b></div>' +
+          (manual ? '<div class="muted" style="margin-top:6px">⚙️ ' + manual + ' negócio(s) sem gerente: rendem só quando você toca neles e não entram no fluxo acima.</div>' : '') +
+          '<div class="muted" style="margin-top:6px">Funcionários só recebem enquanto o negócio produz. O fluxo inclui turbos e eventos ativos; os ganhos offline não.</div>');
         html(r.finNw, '<div class="kv">' +
           '<span>💵 Dinheiro</span><b>' + F.money(s.cash) + '</b>' +
           '<span>📈 Ações e cripto</span><b>' + F.money(pv) + '</b>' +
@@ -1074,7 +1077,7 @@
       var give = function () {
         if (claimed) return;
         claimed = true;
-        G.earn(off.amount);
+        G.earnReward(off.amount);
         root.Sfx.big();
         UI.toast('💰 Ganhos offline dobrados: +' + F.money(off.amount), 'good');
         UI.closeTopModal(); root.Game.save(); UI.update();

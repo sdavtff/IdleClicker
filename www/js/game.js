@@ -44,7 +44,7 @@
       unlocks: { inv: false, lux: false },
       stats: {
         taps: 0, tapEarned: 0, bizRuns: 0, trades: 0, tradeProfit: 0, fees: 0, playSec: 0, adsWatched: 0,
-        bizLevels: 0, skillsBought: 0, propsBought: 0, eventsFixed: 0, dailyDone: 0, offlineEarned: 0, bonusUsed: 0
+        bizLevels: 0, skillsBought: 0, propsBought: 0, eventsFixed: 0, dailyDone: 0, offlineEarned: 0, bonusUsed: 0, prodEarned: 0
       },
       settings: { sound: true, vib: true, reduceMotion: false, bigText: false },
       noAds: false,
@@ -57,13 +57,18 @@
   };
 
   // ---------------- dinheiro (com guardas contra NaN/Infinity) ----------------
-  function earn(a) {
+  // isReward: prêmios (metas, missões, baú, torneio, bônus) não contam como "faturamento produtivo",
+  // para que a missão "Fature $X" não seja concluída com o prêmio de outra missão.
+  function earn(a, isReward) {
     if (!(a > 0) || !isFinite(a)) return;
     var s = G.s;
     s.cash = Math.min(S.BIG, s.cash + a);
     s.runEarned = Math.min(S.BIG, s.runEarned + a);
     s.lifetimeEarned = Math.min(S.BIG, s.lifetimeEarned + a);
+    if (!isReward) s.stats.prodEarned = Math.min(S.BIG, s.stats.prodEarned + a);
   }
+  function reward(a) { earn(a, true); }
+  G.earnReward = reward;
   function spend(a) {
     var s = G.s;
     if (!(a >= 0) || !isFinite(a) || s.cash < a) return false;
@@ -307,7 +312,7 @@
       var reward = Math.min((E.passiveIncome(s, now, true) + E.tapValue(s, now)) * GOAL_REWARD_SEC[kind],
                             E.netWorth(s) * GOAL_REWARD_CAP[kind]);
       reward = Math.max(reward, 10 * (i + 1));
-      earn(reward);
+      earn(reward, true);
       s.goals[kind]++;
       emit('goal', { kind: kind, txt: gp.def.txt, reward: reward });
     });
@@ -342,7 +347,7 @@
   // ---------------- missões diárias ----------------
   function dayKey(t) { var d = new Date(t); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); }
   G.dayKey = dayKey;
-  function dailyStat(s, stat) { return stat === 'earned' ? s.lifetimeEarned : (s.stats[stat] || 0); }
+  function dailyStat(s, stat) { return s.stats[stat === 'earned' ? 'prodEarned' : stat] || 0; }
   function dailyAvailable(s, d) {
     switch (d.req) {
       case 'skills': return s.lifetimeEarned >= 100;
@@ -365,7 +370,7 @@
       case 'taps': return 300;
       case 'levels': return Math.max(10, Math.min(150, Math.round(levels * 0.12 / 5) * 5));
       case 'runs': return 150 * Math.max(1, E.ownedCount(s));
-      case 'earn': return round2(Math.max(2000, income * 900));
+      case 'earn': return round2(Math.max(500, income * 900));
       case 'skills': return 2;
       case 'trades': return 4;
       case 'props': return 2;
@@ -389,8 +394,7 @@
       var d = pool.splice(Math.floor(r() * pool.length), 1)[0];
       var target = dailyTarget(s, d, now);
       list.push({
-        id: d.id, target: target, base: dailyStat(s, d.stat),
-        reward: Math.max(200, (E.passiveIncome(s, now, true) + E.tapValue(s, now)) * d.rewardMin * 60),
+        id: d.id, target: target, base: dailyStat(s, d.stat), reward: 0,
         done: false, claimed: false
       });
     }
@@ -410,19 +414,30 @@
     return d.txt.replace('{n}', F.num(m.target)).replace('{m}', F.money(m.target));
   };
 
+  // Prêmio calculado no momento do resgate: N minutos da renda atual (acompanha o crescimento durante o dia).
+  G.dailyReward = function (m) {
+    var s = G.s, now = G.now(), d = D.DAILY_BY_ID[m.id];
+    // limitado a 25% do patrimônio: no início do jogo, "minutos de renda" valeriam etapas inteiras
+    return Math.max(25, Math.min((E.passiveIncome(s, now, true) + E.tapValue(s, now)) * d.rewardMin * 60,
+                                 Math.max(100, E.netWorth(s) * 0.25)));
+  };
+
   G.claimDaily = function (i) {
     var s = G.s, m = s.daily && s.daily.list[i];
     if (!m || m.claimed || !G.dailyProgress(m).done) return 0;
+    var a = G.dailyReward(m);
     m.done = m.claimed = true;
-    earn(m.reward);
+    m.reward = a;
+    reward(a);
     emit('dailyClaim', m);
-    return m.reward;
+    return a;
   };
 
   G.dailyBonusAmount = function () {
     var s = G.s, now = G.now();
     var streakMult = 1 + Math.min(7, s.daily ? s.daily.streak : 0) * 0.1; // até +70% com 7 dias seguidos
-    return Math.max(1000, (E.passiveIncome(s, now, true) + E.tapValue(s, now)) * D.DAILY_BONUS_MIN * 60 * streakMult);
+    return Math.max(100, Math.min((E.passiveIncome(s, now, true) + E.tapValue(s, now)) * D.DAILY_BONUS_MIN * 60,
+                                  Math.max(500, E.netWorth(s) * 0.5)) * streakMult);
   };
   G.dailyBonusReady = function () {
     var dl = G.s.daily;
@@ -432,7 +447,7 @@
     var s = G.s;
     if (!G.dailyBonusReady()) return 0;
     var a = G.dailyBonusAmount();
-    earn(a);
+    reward(a);
     s.daily.bonus = true;
     s.daily.streak++;
     s.stats.dailyDone++;
@@ -538,7 +553,7 @@
     if (!p) return null;
     var rw = M.rewardFor(p.rank);
     var cash = Math.max(1000, (E.passiveIncome(s, now, true) + E.tapValue(s, now)) * rw.min * 60);
-    earn(cash);
+    reward(cash);
     if (rw.boostH > 0) s.boost.tourUntil = Math.max(now, s.boost.tourUntil) + rw.boostH * 3600000;
     s.tour.pending = null;
     return { cash: cash, boostH: rw.boostH, label: rw.label, rank: p.rank };
@@ -570,7 +585,7 @@
     var s = G.s;
     if (!G.quickCashReady()) return 0;
     var a = G.quickCashAmount();
-    earn(a);
+    reward(a);
     s.boost.quickAt = G.now() + D.QUICK_CASH_CD * 1000;
     return a;
   };

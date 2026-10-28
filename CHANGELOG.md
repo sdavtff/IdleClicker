@@ -28,7 +28,8 @@
 - Opções "Reduzir animações" (respeita também a preferência do sistema) e "Texto maior"; foco visível; contraste maior.
 - Apagar progresso com dupla confirmação; torneio identificado como "rivais simulados".
 ### Testes
-- 35 testes unitários (`npm test`) e 36 verificações de ponta a ponta no navegador (`npm run test:e2e`).
+- 35 testes unitários (`npm test`), 36 verificações de ponta a ponta no navegador (`npm run test:e2e`) e
+  teste de atualização v1.0 → v1.1 com o código real da v1.0 (`npm run test:upgrade`).
 
 ## 1.0.0
 - Primeira versão jogável.

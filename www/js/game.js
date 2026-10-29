@@ -212,8 +212,9 @@
     }
     h.qty -= qty;
     if (h.qty <= 0) delete s.hold[id];
-    s.stats.trades++; s.stats.fees += fee; s.stats.tradeProfit += profit;
-    s.tour.score += profit;
+    s.stats.trades++; s.stats.fees = Math.min(S.BIG, s.stats.fees + fee);
+    s.stats.tradeProfit = Math.max(-S.BIG, Math.min(S.BIG, s.stats.tradeProfit + profit));
+    s.tour.score = Math.max(-S.BIG, Math.min(S.BIG, s.tour.score + profit));
     emit('trade', { id: id, qty: qty, buy: false, profit: profit });
     return profit;
   };

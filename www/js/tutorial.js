@@ -3,6 +3,7 @@
   'use strict';
   var G = root.G, UI = root.UI, E = root.E;
   var bubble = null, focused = null;
+  var shownDone = false; // a etapa já estava cumprida ao ser exibida (ex.: rever tutorial) → avança por botão
 
   var STEPS = [
     { tab: 'home', who: 'Bem-vindo(a) a Cifrópolis!',
@@ -52,10 +53,15 @@
     var skip = UI.h('button', { class: 'skip', text: 'Pular tutorial' });
     skip.addEventListener('click', finish);
     var actions = UI.h('div', { class: 'tut-actions' }, skip, UI.h('span', { class: 'muted', style: 'color:#8b80aa', text: (i + 1) + '/' + STEPS.length }));
+    shownDone = !!(st.done && st.done(s));
     if (!st.done) {
       var ok = UI.h('button', { class: 'btn', text: 'Vamos lá!' });
       ok.addEventListener('click', finish);
       actions.appendChild(ok);
+    } else if (shownDone) {
+      var next = UI.h('button', { class: 'btn', text: 'Próximo ›' });
+      next.addEventListener('click', function () { s.tutorial++; render(); });
+      actions.appendChild(next);
     }
     bubble.appendChild(UI.h('div', { class: 'tut-who', text: st.who }));
     bubble.appendChild(UI.h('div', { text: st.text }));
@@ -88,7 +94,7 @@
       var s = G.s;
       if (s.tutorial < 0 || !bubble) return;
       var st = STEPS[s.tutorial];
-      if (st && st.done && st.done(s)) {
+      if (st && st.done && !shownDone && st.done(s)) {
         s.tutorial++;
         root.Sfx.buy();
         render();

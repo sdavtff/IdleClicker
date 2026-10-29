@@ -38,10 +38,20 @@
         UI.toast('💼 Novo cargo: <b>' + D.JOBS[G.s.jobs - 1].name + '</b>', 'good');
       }
     });
+    // várias metas concluídas em sequência viram um único aviso com o total (evita enxurrada de toasts)
+    var goalBatch = null;
     G.on('goal', function (g) {
       UI.flashGoal(g.kind);
-      root.Sfx.big();
-      UI.toast('✅ Meta concluída: ' + g.txt + ' <b>+' + F.money(g.reward) + '</b>', 'good');
+      if (!goalBatch) {
+        root.Sfx.big();
+        goalBatch = { n: 0, total: 0, txt: '' };
+        setTimeout(function () {
+          var b = goalBatch; goalBatch = null;
+          UI.toast(b.n === 1 ? '✅ Meta concluída: ' + b.txt + ' <b>+' + F.money(b.total) + '</b>'
+                             : '✅ ' + b.n + ' metas concluídas <b>+' + F.money(b.total) + '</b>', 'good');
+        }, 600);
+      }
+      goalBatch.n++; goalBatch.total += g.reward; goalBatch.txt = g.txt;
     });
     G.on('bizEvent', function (ev) {
       var t = G.EVENT_TYPES[ev.type], b = root.E.BIZ[ev.biz];
@@ -96,19 +106,27 @@
   }
 
   var last = 0, uiAcc = 0, saveAcc = 0;
+  var frameErrors = 0;
   function frame(t) {
-    // o app voltou de segundo plano antes do evento visibilitychange: aplica o tempo ausente
-    var gapMs = Date.now() - G.s.lastSeen;
-    if (gapMs > 2000 || gapMs < -120000) { resume(); t = last; }
-    var dt = Math.min(0.5, Math.max(0, (t - last) / 1000));
-    last = t;
-    G.tick(dt);
-    G.touch(Date.now());
-    UI.frame();
-    uiAcc += dt; saveAcc += dt;
-    if (uiAcc >= 0.2) { uiAcc = 0; UI.update(); root.Tutorial.update(); }
-    if (saveAcc >= 10) { saveAcc = 0; G.save(); }
+    // reagenda primeiro: um erro inesperado neste frame não pode congelar o jogo
     requestAnimationFrame(frame);
+    try {
+      // o app voltou de segundo plano antes do evento visibilitychange: aplica o tempo ausente
+      var gapMs = Date.now() - G.s.lastSeen;
+      if (gapMs > 2000 || gapMs < -120000) { resume(); t = last; }
+      var dt = Math.min(0.5, Math.max(0, (t - last) / 1000));
+      last = t;
+      G.tick(dt);
+      G.touch(Date.now());
+      UI.frame();
+      uiAcc += dt; saveAcc += dt;
+      if (uiAcc >= 0.2) { uiAcc = 0; UI.update(); root.Tutorial.update(); }
+      if (saveAcc >= 10) { saveAcc = 0; G.save(); }
+    } catch (e) {
+      last = t;
+      if (root.console) console.error(e);
+      if (++frameErrors === 1) UI.toast('⚠️ Ocorreu um erro inesperado. O jogo continua e seu progresso está salvo.', 'bad', null, 6000);
+    }
   }
 
   function setupBackButton() {

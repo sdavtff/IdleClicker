@@ -372,3 +372,15 @@ body.big-text #tabbar button { font-size: 12.5px; }
 body.big-text .seg-icons button { font-size: 12px; }
 body.big-text .goal .gt { height: auto; -webkit-line-clamp: 3; }
 .fin-note { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.4; }
+button.goal { display: block; width: 100%; font: inherit; color: inherit; cursor: pointer; }
+button.goal:active { transform: scale(0.97); }
+
+/* v1.1.1 — áreas de toque ≥ 44 px */
+.seg button { min-height: 44px; }
+.qty button { min-height: 44px; }
+.evt .btn { min-height: 42px; min-width: 76px; }
+button.toggle { width: 100%; min-height: 52px; text-align: left; font-size: 15px; color: var(--text); }
+button.toggle:last-child { border-bottom: 0; }
+.switch { flex: 0 0 auto; }
+#toasts { top: calc(var(--hud-h, 120px) + 6px); }
+.title.wrap { white-space: normal; }

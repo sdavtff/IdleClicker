@@ -27,6 +27,14 @@
   function html(el, v) { if (el._h !== v) { el._h = v; el.innerHTML = v; } }
   function cls(el, c, on) { if (el.classList.contains(c) !== !!on) el.classList.toggle(c, !!on); }
   function show(el, on) { cls(el, 'hidden', !on); }
+  // Copia texto com feedback correto (a API é assíncrona e pode falhar sem permissão/contexto seguro)
+  function copyText(text, okMsg, failMsg) {
+    var fail = function () { UI.toast(failMsg, 'info'); };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { UI.toast(okMsg, 'good'); }, fail);
+      else fail();
+    } catch (e) { fail(); }
+  }
   function vibrate(ms) { try { if (G.s.settings.vib && navigator.vibrate) navigator.vibrate(ms); } catch (e) { /* ignore */ } }
   function btnLabel(btn, main, sub) { html(btn, main + (sub ? '<small>' + sub + '</small>' : '')); }
   // Escapa texto para inserção segura em HTML (dados vindos de save/importação nunca entram crus).
@@ -156,7 +164,8 @@
     hud.goals = {};
     [['short', 'CURTO'], ['mid', 'MÉDIO'], ['long', 'LONGO']].forEach(function (p) {
       var g = { t: h('div', { class: 'gt' }), bar: h('i') };
-      g.el = h('div', { class: 'goal ' + p[0] }, h('div', { class: 'gk', text: '🎯 ' + p[1] }), g.t, h('div', { class: 'bar' }, g.bar));
+      g.el = h('button', { class: 'goal ' + p[0], 'aria-label': 'Meta de ' + p[1].toLowerCase() + ' prazo' }, h('div', { class: 'gk', text: '🎯 ' + p[1] }), g.t, h('div', { class: 'bar' }, g.bar));
+      g.el.addEventListener('click', function () { UI.showGoal(p[0], p[1]); });
       hud.goals[p[0]] = g;
       goals.appendChild(g.el);
     });
@@ -181,6 +190,17 @@
       g.bar.style.width = (gp.frac * 100).toFixed(1) + '%';
     });
   }
+  var MONEY_GOALS = { cash: 1, earned: 1, ips: 1, nw: 1 };
+  UI.showGoal = function (kind, label) {
+    var gp = G.goalProgress(kind), money = MONEY_GOALS[gp.def.t];
+    var fmt = function (v) { return money ? F.money(v) : F.num(v); };
+    UI.modal({ icon: '🎯', title: 'Meta de ' + label.toLowerCase() + ' prazo', html:
+      '<p style="font-size:16px;color:var(--text)"><b>' + esc(gp.def.txt) + '</b></p>' +
+      '<div class="bar big"><i style="width:' + (gp.frac * 100).toFixed(1) + '%"></i></div>' +
+      '<p>' + fmt(Math.min(gp.cur, gp.target)) + ' / ' + fmt(gp.target) + ' (' + Math.floor(gp.frac * 100) + '%)</p>' +
+      '<p class="muted small">Ao concluir, você recebe um prêmio em dinheiro e a próxima meta aparece. Metas de ' +
+      (kind === 'short' ? 'curto prazo levam minutos' : kind === 'mid' ? 'médio prazo levam de minutos a horas' : 'longo prazo são os grandes marcos do império') + '.</p>' });
+  };
   UI.flashGoal = function (kind) {
     var g = hud.goals[kind]; if (!g) return;
     g.el.classList.remove('flash'); void g.el.offsetWidth; g.el.classList.add('flash');
@@ -849,9 +869,14 @@
     // Ajustes
     r.set = h('div');
     function toggle(label, key, onChange) {
-      var sw = h('button', { class: 'switch', 'aria-label': label });
-      sw.addEventListener('click', function () { G.s.settings[key] = !G.s.settings[key]; if (onChange) onChange(G.s.settings[key]); root.Game.save(); UI.update(); });
-      var row = h('div', { class: 'toggle' }, h('span', { text: label }), sw);
+      // a linha inteira é o controle (área de toque grande; anunciado como "switch" por leitores de tela)
+      var sw = h('span', { class: 'switch', 'aria-hidden': 'true' });
+      var row = h('button', { class: 'toggle', role: 'switch', 'aria-label': label }, h('span', { text: label }), sw);
+      row.addEventListener('click', function () {
+        G.s.settings[key] = !G.s.settings[key];
+        if (onChange) onChange(G.s.settings[key]);
+        root.Game.save(); UI.update();
+      });
       row.sw = sw; row.key = key;
       return row;
     }
@@ -876,7 +901,7 @@
     var ta = h('textarea', { placeholder: 'Código do save aparece aqui / cole um código para importar' });
     expBtn.addEventListener('click', function () {
       root.Game.save(); ta.value = G.exportSave(); ta.select();
-      try { navigator.clipboard.writeText(ta.value); UI.toast('Código copiado!', 'good'); } catch (e) { UI.toast('Copie o código abaixo.', 'info'); }
+      copyText(ta.value, 'Código copiado!', 'Não foi possível copiar automaticamente — copie o código da caixa abaixo.');
     });
     impBtn.addEventListener('click', function () {
       var code = ta.value;
@@ -930,7 +955,7 @@
         btn.addEventListener('click', function () {
           if (!b.valid) {
             ta.value = G.backupRaw(k) || '';
-            try { navigator.clipboard.writeText(ta.value); UI.toast('Conteúdo copiado para você guardar.', 'good'); } catch (e) { UI.toast('Conteúdo exibido na caixa de texto acima.', 'info'); }
+            copyText(ta.value, 'Conteúdo copiado para você guardar.', 'Conteúdo exibido na caixa de texto acima.');
             return;
           }
           UI.modal({ icon: '↩️', title: 'Restaurar este backup?', html: '<p>' + esc(desc) + '</p><p>O progresso atual será guardado como "antes da última restauração".</p>',
@@ -1000,7 +1025,7 @@
       } else if (t === 'tour') {
         var rank = M.ranking(s, now);
         var me = rank.findIndex(function (x) { return x.me; }) + 1;
-        html(r.tourHead, '<div class="row"><div style="font-size:40px">🏆</div><div class="grow"><div class="title">Torneio Semanal da Bolsa</div>' +
+        html(r.tourHead, '<div class="row"><div style="font-size:40px">🏆</div><div class="grow"><div class="title wrap">Torneio Semanal da Bolsa</div>' +
           '<div class="sim-tag">Modo offline · rivais simulados no aparelho</div>' +
           '<div class="muted">Termina em ' + F.time((M.weekEnd(s.tour.week) - now) / 1000) + ' · Sua posição: <b style="color:var(--gold)">#' + me + '</b>' +
           (s.tour.best ? ' · Melhor: #' + s.tour.best : '') + '</div></div></div>');
@@ -1019,7 +1044,7 @@
         btnLabel(r.legBtn, pot > 0 ? '🌅 Fundar Legado (+' + pot + ' ⭐)' : 'Fature mais para ganhar estrelas', pot > 0 ? 'recomeçar com +' + Math.round((s.stars + pot) * 10) + '% de renda' : '');
         cls(r.legBtn, 'off', pot < 1);
       } else {
-        r.toggles.forEach(function (tg) { cls(tg.sw, 'on', !!s.settings[tg.key]); tg.sw.setAttribute('aria-pressed', String(!!s.settings[tg.key])); });
+        r.toggles.forEach(function (tg) { cls(tg.sw, 'on', !!s.settings[tg.key]); tg.setAttribute('aria-checked', String(!!s.settings[tg.key])); });
         var storeOn = root.Store.available(), adsOn = root.AdService.available();
         if (s.noAds) {
           txt(r.adsTxt, 'Anúncios removidos nesta conta: os bônus são instantâneos.');
@@ -1113,6 +1138,12 @@
     var sysReduce = !!(root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches);
     cls(b, 'reduce-motion', st.reduceMotion || sysReduce);
     cls(b, 'big-text', st.bigText);
+    UI.syncHudHeight();
+  };
+  // Toasts ficam logo abaixo do HUD, cuja altura muda com "texto maior", rotação e área segura.
+  UI.syncHudHeight = function () {
+    var hudEl = document.getElementById('hud');
+    if (hudEl) document.documentElement.style.setProperty('--hud-h', hudEl.getBoundingClientRect().bottom + 'px');
   };
   UI.reduceMotion = function () { return document.body.classList.contains('reduce-motion'); };
 
@@ -1122,6 +1153,8 @@
     buildHud(); buildTabs();
     buildHome(); buildBiz(); buildInv(); buildLux(); buildMore(); buildLocked();
     UI.applySettings();
+    root.addEventListener('resize', UI.syncHudHeight);
+    if (root.ResizeObserver) new root.ResizeObserver(UI.syncHudHeight).observe(document.getElementById('hud'));
     UI.go('home');
   };
 

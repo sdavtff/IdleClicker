@@ -5,7 +5,7 @@
   var D = {};
 
   D.GAME_NAME = 'Cifrópolis';
-  D.VERSION = '1.1.0';
+  D.VERSION = '1.1.1';
   D.SAVE_KEY = 'cifropolis_save_v1';
   D.SAVE_VERSION = 2;
   D.MAX_BIZ_LVL = 100000;  // limite de nível por negócio (evita overflow nos custos)

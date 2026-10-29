@@ -55,7 +55,7 @@ const check = (n, ok, info) => { results.push(ok); console.log((ok ? 'PASS ' : '
              emp: s.biz.suco.emp, burger: s.biz.burger.lvl, skills: JSON.stringify(s.skills), props: s.props.kitnet, lux: Object.keys(s.lux).sort().join(','),
              nxs: s.hold.NXS.qty, taps: s.stats.taps };
   });
-  check('Save da v1.0 criado', oldInfo.v === 1 && oldInfo.suco === 60, JSON.stringify(oldInfo));
+  check('Save da versão antiga (' + OLD + ') criado', oldInfo.suco === 60, JSON.stringify(oldInfo));
 
   // troca para o código atual na mesma origem e recarrega
   root = roots.cur;
@@ -68,7 +68,8 @@ const check = (n, ok, info) => { results.push(ok); console.log((ok ? 'PASS ' : '
              emp: s.biz.suco.emp, burger: s.biz.burger.lvl, skills: JSON.stringify(s.skills), props: s.props.kitnet, lux: Object.keys(s.lux).sort().join(','),
              nxs: s.hold.NXS && s.hold.NXS.qty, taps: s.stats.taps, unlocks: s.unlocks, daily: !!s.daily, bad: localStorage.getItem(G.KEYS.bad) };
   });
-  check('Atualizado para o formato atual', cur.v === 2 && cur.version === '1.1.0', 'v' + cur.v + ' / ' + cur.version);
+  const pkgVersion = require(path.join(repo, 'package.json')).version;
+  check('Atualizado para o formato atual', cur.v === 2 && cur.version === pkgVersion, 'save v' + cur.v + ' / jogo ' + cur.version);
   for (const k of ['jobs', 'suco', 'mgr', 'emp', 'burger', 'skills', 'props', 'lux', 'nxs', 'taps']) check('Preservado: ' + k, cur[k] === oldInfo[k], oldInfo[k] + ' → ' + cur[k]);
   check('Dinheiro preservado (sem perdas)', cur.cash >= oldInfo.cash, oldInfo.cash + ' → ' + cur.cash);
   check('Faturamento total preservado', cur.lifetime >= oldInfo.lifetime);

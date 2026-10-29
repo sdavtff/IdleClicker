@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.1.1 — correção e polimento
+### Painel financeiro
+- Salários de funcionários eram descontados a cada frame (inclusive na produção manual), mas o painel só somava
+  negócios com gerente; sem dinheiro, a parte não paga "sumia". Agora o salário é pago a cada ciclo concluído,
+  descontado da receita do próprio ciclo (sempre positiva) — com ou sem gerente. O faturamento conta o líquido.
+- Painel mostra negócios sem gerente (em produção/parados), totais realmente pagos em salários e manutenção e o
+  fluxo **medido** nos últimos 60 s (créditos e débitos reais).
+### Economia
+- Custo de funcionário: o menor entre a fórmula antiga e 30 s da renda-base do negócio × 2,6^n — início idêntico,
+  10º funcionário dos negócios tardios passou de meses/anos para dias de retorno. Gerente do Banco: $10 B → $2 B.
+- Simulador e testes desligam eventos aleatórios de fato (`G.options.randomEvents`); simulações de 15 min a 12 h,
+  com Legado e com eventos, sem NaN/Infinity/saldo negativo.
+### Robustez e segurança
+- Uma exceção no laço do jogo congelava tudo; agora o laço reagenda antes e trata o erro.
+- Cópia para a área de transferência informa sucesso/falha real; placar do torneio e estatísticas da bolsa limitados.
+### Interface e acessibilidade
+- Alvos de toque ≥ 44 px (segmentados, quantidades, botão de evento); interruptores ocupam a linha inteira, com
+  `role="switch"` e `aria-checked`.
+- Toasts posicionados logo abaixo da altura real do HUD; metas concluídas em sequência viram um único aviso.
+- Metas do topo abrem detalhe com progresso numérico; título do torneio quebra linha.
+- "Rever tutorial" não pula etapas já cumpridas (botão "Próximo").
+### Testes
+- 51 testes unitários, 43 verificações E2E, 18 de atualização v1.0 → atual e checagem visual em 5 tamanhos × 2 escalas.
+
+
 ## 1.1.0
 ### Segurança e save
 - Validação campo a campo de saves carregados e importados (`www/js/save.js`): tipos, faixas, IDs conhecidos,

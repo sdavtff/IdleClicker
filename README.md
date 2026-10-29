@@ -107,7 +107,8 @@ Depois: `./gradlew assembleRelease` (APK) ou `./gradlew bundleRelease` (AAB para
 |---|---|
 | `npm run balance` | Simula 2 h de jogo com o código real e imprime a tabela de balanceamento |
 | `npm test` | Testes unitários (Node, sem dependências): compras, upgrades, produção, funcionários, despesas, offline, relógio, Legado, missões, conquistas, save, importação maliciosa, formatação |
-| `npm run test:e2e` | Teste de ponta a ponta no Chromium com tela de celular (36 verificações) — requer `npm i -D playwright && npx playwright install chromium` |
+| `npm run test:e2e` | Teste de ponta a ponta no Chromium com tela de celular (43 verificações) — requer `npm i -D playwright && npx playwright install chromium` |
+| `npm run test:visual` | Percorre todas as telas em 5 tamanhos de celular (texto normal e maior) e acusa estouro de largura, alvos de toque < 40 px e textos cortados |
 | `npm run test:upgrade` | Joga com o código real da v1.0 (do git), salva e reabre com o código atual: verifica que o save antigo é preservado e migrado |
 | `node tools/balance-sim.js 480 3 prestige` | Simula 8 h com Legado e aborta se encontrar NaN/Infinity/saldo negativo |
 | `node tools/gen-icons.js` | Regenera ícones e splash do Android a partir de `www/assets/icon.svg` |

@@ -19,8 +19,7 @@ G.rng = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
 let clock = Date.UTC(2026, 9, 26, 12, 0, 0);
 G.now = () => clock;
 G.s = G.newState();
-G.s.nextEventAt = Infinity; // eventos aleatórios desligados para resultado reprodutível
-G.s.nextNewsAt = Infinity;
+G.options.randomEvents = false; // eventos aleatórios desligados para resultado reprodutível
 let s = G.s;
 
 const marks = new Set((MINUTES > 120 ? Array.from({ length: Math.floor(MINUTES / 30) }, (_, i) => (i + 1) * 30)
@@ -105,7 +104,7 @@ for (let t = 1; t <= totalSec; t++) {
   if (s.daily) { s.daily.list.forEach((m, i) => G.claimDaily(i)); G.claimDailyBonus(); }
   if (PRESTIGE && E.potentialStars(s) >= Math.max(5, s.stars)) {
     const g = G.prestige();
-    s = G.s; s.nextEventAt = Infinity; s.nextNewsAt = Infinity;
+    s = G.s;
     firsts.push([t, 'Legado #' + s.prestiges + ' (+' + g + ' ⭐, total ' + s.stars + ')']);
   }
   const bad = [s.cash, s.lifetimeEarned, E.netWorth(s), E.passiveIncome(s, clock)].some(v => !Number.isFinite(v) || v < 0);

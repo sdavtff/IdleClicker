@@ -29,8 +29,7 @@ function fresh(opts = {}) {
   G.now = () => clock;
   G.storage = memStorage();
   G.s = G.newState();
-  G.s.nextEventAt = 1e15; // eventos aleatórios desligados nos testes determinísticos
-  G.s.nextNewsAt = 1e15;
+  G.options.randomEvents = !!opts.events; // eventos aleatórios desligados nos testes determinísticos
   if (opts.cash) G.s.cash = opts.cash;
   return G.s;
 }
@@ -362,7 +361,6 @@ test('salvar e carregar preserva o estado', () => {
   const s = fresh({ cash: 1e6 });
   G.buyBiz('suco', 12); G.hireManager('suco'); G.buyLux('w1'); G.buyAsset('BYTE', 3);
   s.ach.tap100 = true;
-  s.nextEventAt = clock + 60000; s.nextNewsAt = clock + 90000;
   G.save();
   const snapshot = JSON.stringify(G.s);
   const st = G.storage;
@@ -511,7 +509,7 @@ test('restaurar backup automático', () => {
 });
 
 test('sessão longa simulada (2 h de jogo) mantém todos os números finitos', () => {
-  const s = fresh();
+  const s = fresh({ events: true });
   s.nextEventAt = clock + 1000; // eventos ligados
   for (let t = 0; t < 7200; t++) {
     clock += 1000;
@@ -551,4 +549,228 @@ test('cartão do negócio: receita líquida por ciclo bate com o dinheiro recebi
   G.runBiz('pixel');
   advance(T + 0.5);
   close(s.cash - c0, net, 0.02);
+});
+
+// ---------- v1.1.1: painel financeiro = dinheiro realmente movimentado ----------
+test('produção manual com funcionários: recebe exatamente o líquido do ciclo e o salário é registrado', () => {
+  const s = fresh({ cash: 1e9 });
+  noRewards(s);
+  G.buyBiz('pixel', 20); G.hireEmployee('pixel'); G.hireEmployee('pixel'); G.hireEmployee('pixel');
+  const wages = E.bizCycleWages(s, 'pixel');
+  const net = E.bizCycleNet(s, 'pixel', clock);
+  assert.ok(wages > 0);
+  const c0 = s.cash, w0 = s.stats.wagesPaid, l0 = s.lifetimeEarned;
+  G.runBiz('pixel');
+  advance(E.bizTime(s, 'pixel') + 0.5);
+  close(s.cash - c0, net, 1e-9);
+  close(s.stats.wagesPaid - w0, wages, 1e-9);
+  close(s.lifetimeEarned - l0, net, 1e-9, 'faturamento conta o líquido, não o bruto');
+});
+
+test('sem dinheiro: salários saem da receita do ciclo, saldo nunca fica negativo e nada é perdido', () => {
+  const s = fresh({ cash: 1e9 });
+  noRewards(s);
+  G.buyBiz('arena', 5);
+  for (let i = 0; i < 10; i++) G.hireEmployee('arena');
+  s.cash = 0;
+  const net = E.bizCycleNet(s, 'arena', clock), wages = E.bizCycleWages(s, 'arena');
+  G.runBiz('arena');
+  let minCash = Infinity;
+  for (let t = 0; t < E.bizTime(s, 'arena') + 1; t += 0.25) { clock += 250; G.tick(0.25); minCash = Math.min(minCash, s.cash); }
+  assert.ok(minCash >= 0);
+  close(s.cash, net, 1e-9);
+  close(s.stats.wagesPaid, wages, 1e-9);
+});
+
+test('painel: líquido por segundo = dinheiro recebido; fluxo medido bate com o painel', () => {
+  const s = fresh({ cash: 1e12 });
+  noRewards(s);
+  G.buyBiz('suco', 60); G.hireManager('suco'); for (let i = 0; i < 4; i++) G.hireEmployee('suco');
+  G.buyBiz('escola', 30); G.hireManager('escola'); for (let i = 0; i < 6; i++) G.hireEmployee('escola');
+  G.buyJob(); G.buyJob(); G.buyJob();
+  G.buyProp('kitnet'); G.buyProp('apto');
+  G.resetFlow();
+  const b = E.breakdown(s, clock, true);
+  const c0 = s.cash, w0 = s.stats.wagesPaid, r0 = s.stats.rentUpkeepPaid;
+  advance(240);
+  close(s.cash - c0, b.net * 240, 0.01);
+  close(s.stats.wagesPaid - w0, b.empUpkeep * 240, 0.02);
+  close(s.stats.rentUpkeepPaid - r0, b.rentUpkeep * 240, 1e-6);
+  const mf = G.measuredFlow();
+  assert.ok(mf && mf.secs >= 59);
+  close(mf.net, b.net, 0.08); // ciclos de 8 s pagam em parcelas dentro da janela de 60 s
+  close(mf.wages, b.empUpkeep, 0.08);
+  close(mf.rentUp, b.rentUpkeep, 1e-6);
+});
+
+test('breakdown lista negócios sem gerente (em produção e parados) fora do fluxo contínuo', () => {
+  const s = fresh({ cash: 1e9 });
+  G.buyBiz('suco', 10); G.buyBiz('burger', 10); G.hireEmployee('burger');
+  G.runBiz('burger');
+  const b = E.breakdown(s, clock, true);
+  assert.equal(b.manual.running, 1);
+  assert.equal(b.manual.idle, 1);
+  close(b.manual.net, E.bizCycleNet(s, 'burger', clock, true));
+  assert.equal(b.biz, 0);
+  assert.equal(b.empUpkeep, 0);
+});
+
+test('offline registra salários e manutenção pagos', () => {
+  const s = fresh({ cash: 1e9 });
+  G.buyBiz('suco', 30); G.hireManager('suco'); G.hireEmployee('suco'); G.buyProp('kitnet');
+  G.touch(clock);
+  const b = E.breakdown(s, clock, true);
+  const w0 = s.stats.wagesPaid;
+  clock += 3600 * 1000;
+  const off = G.computeOffline();
+  close(s.stats.wagesPaid - w0, b.empUpkeep * 3600, 1e-9);
+  close(off.amount, b.net * 3600, 1e-9);
+});
+
+// ---------- save: falhas de armazenamento e formatos estranhos ----------
+test('armazenamento cheio: salvar falha sem travar e avisa uma única vez', () => {
+  fresh({ cash: 5 });
+  let warned = 0;
+  G.on('saveError', () => warned++);
+  G.storage.setItem = () => { throw new Error('QuotaExceededError'); };
+  assert.equal(G.save(), false);
+  assert.equal(G.save(), false);
+  assert.equal(warned, 1);
+  assert.equal(G.s.cash, 5);
+});
+
+test('armazenamento ilegível no carregamento começa um jogo novo sem erro', () => {
+  fresh();
+  G.storage.getItem = () => { throw new Error('SecurityError'); };
+  assert.equal(G.load().status, 'new');
+  assert.equal(G.s.cash, 0);
+});
+
+test('tipos aninhados errados são substituídos por padrões seguros', () => {
+  fresh();
+  const raw = { v: 2, biz: { suco: [1, 2, 3], burger: 'x' }, stats: 'abc', settings: [1], goals: 7, boost: null,
+                mkt: { NXS: { p: -5, hist: 'x' }, BYTE: { p: 1e300, hist: [1, 'a', -2, 3] } }, daily: { day: 1, list: [{ id: 'taps' }] },
+                ach: ['tap100'], lux: 'w1', tour: [], news: 'oi', events: {}, hold: { NXS: 5 }, cash: 10 };
+  G.storage.setItem(D.SAVE_KEY, JSON.stringify(raw));
+  assert.equal(G.load().status, 'ok');
+  const s = G.s;
+  assert.equal(s.cash, 10);
+  assert.equal(s.biz.suco.lvl, 0);
+  assert.equal(s.stats.taps, 0);
+  assert.equal(s.settings.sound, true);
+  assert.equal(s.goals.short, 0);
+  assert.ok(s.mkt.NXS.p > 0 && s.mkt.NXS.hist.length === 1);
+  assert.ok(s.mkt.BYTE.p <= 2400 * 1e4);
+  assert.deepEqual(s.mkt.BYTE.hist, [1, 3]);
+  assert.equal(s.daily, null, 'missões com lista incompleta são descartadas e regeneradas');
+  assert.deepEqual(s.ach, {});
+  assert.deepEqual(s.lux, {});
+  assert.deepEqual(s.hold, {});
+  assert.deepEqual(s.news, []);
+  assert.deepEqual(s.events, []);
+});
+
+test('exportar e importar preserva todo o progresso', () => {
+  const s = fresh({ cash: 1e9 });
+  G.buyBiz('suco', 40); G.hireManager('suco'); G.hireEmployee('suco'); G.buyJob(); G.buySkill('toque');
+  G.buyLux('w1'); G.buyProp('kitnet'); G.buyAsset('NEB', 7);
+  for (let i = 0; i < 150; i++) G.tap();
+  advance(1);
+  const before = JSON.parse(JSON.stringify(G.s));
+  const code = G.exportSave();
+  G.reset();
+  assert.equal(G.s.biz.suco.lvl, 0);
+  G.importSave(code);
+  const after = G.s;
+  for (const k of ['cash', 'lifetimeEarned', 'jobs', 'stars']) close(after[k], before[k]);
+  assert.deepEqual(after.biz, before.biz);
+  assert.deepEqual(after.skills, before.skills);
+  assert.deepEqual(after.lux, before.lux);
+  assert.deepEqual(after.props, before.props);
+  assert.deepEqual(after.hold, before.hold);
+  assert.deepEqual(after.ach, before.ach);
+  assert.deepEqual(after.stats, before.stats);
+  void s;
+});
+
+test('restaurar o backup "antes de apagar" desfaz o reset', () => {
+  fresh({ cash: 4321 });
+  G.save();
+  G.reset();
+  assert.equal(G.s.cash, 0);
+  G.restoreBackup('pre');
+  assert.equal(G.s.cash, 4321);
+});
+
+// ---------- economia: sem recompensas duplicadas nem compras indevidas ----------
+test('prêmio do torneio é pago uma vez e semana regredida não gera prêmio', () => {
+  const s = fresh({ cash: 1e6 });
+  G.checkTournament(clock);
+  s.tour.score = 1e9;
+  clock += 8 * 86400000;
+  G.checkTournament(clock);
+  assert.ok(s.tour.pending);
+  assert.ok(G.claimTourReward());
+  assert.equal(G.claimTourReward(), null);
+  const wk = s.tour.week;
+  s.tour.score = 1e9;
+  G.checkTournament(clock - 14 * 86400000);
+  assert.equal(s.tour.pending, null);
+  assert.equal(s.tour.week, wk);
+});
+
+test('cada meta e conquista paga uma única vez', () => {
+  const s = fresh({ cash: 0 });
+  let goals = 0, achs = 0;
+  G.on('goal', () => goals++); G.on('ach', () => achs++);
+  for (let i = 0; i < 120; i++) G.tap();
+  advance(2);
+  const g1 = goals, a1 = achs;
+  advance(10);
+  assert.ok(g1 >= 1 && a1 >= 1);
+  assert.equal(goals, g1);
+  assert.equal(achs, a1);
+});
+
+test('bônus gratuitos respeitam recarga; lucro rápido não paga duas vezes', () => {
+  const s = fresh({ cash: 0 });
+  assert.equal(G.useFreeBoost(), true);
+  assert.equal(G.useFreeBoost(), false);
+  clock += (D.AD_BOOST_MIN + D.FREE_BOOST_CD_MIN) * 60000 + 1000;
+  assert.equal(G.useFreeBoost(), true);
+  assert.ok(G.applyQuickCash() > 0);
+  assert.equal(G.applyQuickCash(), 0);
+  void s;
+});
+
+test('comprar "MÁX" nunca gasta mais que o saldo, em qualquer escala', () => {
+  for (const cash of [10, 1234, 5e6, 7.7e12, 3e40, 1e200]) {
+    const s = fresh({ cash });
+    for (const b of D.BUSINESSES) {
+      const c0 = s.cash;
+      G.buyBiz(b.id, 'max');
+      assert.ok(s.cash >= 0 && s.cash <= c0, b.id + ' @' + cash);
+      assert.ok(Number.isFinite(s.cash));
+    }
+    const c1 = s.cash;
+    G.buyAsset('GATO', 'max');
+    assert.ok(s.cash >= 0 && s.cash <= c1);
+  }
+});
+
+test('custos crescem de forma monotônica e finita em toda a faixa de níveis', () => {
+  const s = fresh();
+  for (const b of D.BUSINESSES) {
+    let prev = 0;
+    for (const lvl of [0, 1, 10, 100, 500, 1000, 3000]) {
+      s.biz[b.id].lvl = lvl;
+      const c = E.bizCost(s, b.id, 1);
+      assert.ok(c > prev, b.id + ' nível ' + lvl);
+      prev = c;
+    }
+    s.biz[b.id].lvl = D.MAX_BIZ_LVL;
+    assert.ok(!Number.isNaN(E.bizCost(s, b.id, 1)));
+    s.cash = 1e300;
+    assert.equal(G.buyBiz(b.id, 1), false, 'nível máximo não compra mais');
+  }
 });

@@ -9,7 +9,9 @@
   var S = isNode ? require('./save.js') : root.SaveIO;
   var F = isNode ? require('./fmt.js') : root.F;
 
-  var G = { s: null, rng: Math.random, now: function () { return Date.now(); }, storage: null };
+  var G = { s: null, rng: Math.random, now: function () { return Date.now(); }, storage: null,
+            // randomEvents: eventos de negócios e notícias da bolsa (desligáveis para testes e simulação reproduzíveis)
+            options: { randomEvents: true } };
   var listeners = {};
   G.on = function (ev, fn) { (listeners[ev] = listeners[ev] || []).push(fn); };
   function emit(ev, data) {
@@ -44,7 +46,7 @@
       unlocks: { inv: false, lux: false },
       stats: {
         taps: 0, tapEarned: 0, bizRuns: 0, trades: 0, tradeProfit: 0, fees: 0, playSec: 0, adsWatched: 0,
-        bizLevels: 0, skillsBought: 0, propsBought: 0, eventsFixed: 0, dailyDone: 0, offlineEarned: 0, bonusUsed: 0, prodEarned: 0
+        bizLevels: 0, skillsBought: 0, propsBought: 0, eventsFixed: 0, dailyDone: 0, offlineEarned: 0, bonusUsed: 0, prodEarned: 0, wagesPaid: 0, rentUpkeepPaid: 0
       },
       settings: { sound: true, vib: true, reduceMotion: false, bigText: false },
       noAds: false,
@@ -454,6 +456,30 @@
     return a;
   };
 
+  // ---------------- fluxo medido (últimos 60 s, só em memória) ----------------
+  // Soma o que foi REALMENTE creditado/debitado em cada categoria, para o painel mostrar o valor medido.
+  var FLOW_KEYS = ['biz', 'manual', 'wages', 'salary', 'rent', 'rentUp'];
+  var flowCur = null, flowBuckets = [], flowAge = 0;
+  function newBucket() { var b = { t: 0 }; FLOW_KEYS.forEach(function (k) { b[k] = 0; }); return b; }
+  function flow(k, v) { if (!flowCur) flowCur = newBucket(); if (v > 0 && isFinite(v)) flowCur[k] += v; }
+  function flowTick(dt) {
+    if (!flowCur) flowCur = newBucket();
+    flowCur.t += dt; flowAge += dt;
+    if (flowCur.t >= 1) { flowBuckets.push(flowCur); flowCur = null; if (flowBuckets.length > 60) flowBuckets.shift(); }
+  }
+  G.resetFlow = function () { flowCur = null; flowBuckets = []; flowAge = 0; };
+  // Retorna médias por segundo das categorias + net, ou null se ainda não há 5 s de amostra.
+  // Como os ciclos pagam em parcelas, o valor medido oscila em torno do fluxo do painel.
+  G.measuredFlow = function () {
+    var tot = newBucket();
+    flowBuckets.forEach(function (b) { FLOW_KEYS.concat(['t']).forEach(function (k) { tot[k] += b[k]; }); });
+    if (tot.t < 5) return null;
+    var out = { secs: tot.t };
+    FLOW_KEYS.forEach(function (k) { out[k] = tot[k] / tot.t; });
+    out.net = out.biz + out.manual + out.salary + out.rent - out.wages - out.rentUp;
+    return out;
+  };
+
   // ---------------- laço principal ----------------
   var slowAcc = 0;
   G.tick = function (dt) {
@@ -466,24 +492,29 @@
       if (st.lvl <= 0 || !(st.mgr || st.running)) return;
       var T = E.bizTime(s, b.id);
       st.prog += dt / T;
-      var up = E.bizUpkeep(s, b.id) * dt;
-      if (up > 0) s.cash = Math.max(0, s.cash - up);
       if (st.prog >= 1) {
         var n = st.mgr ? Math.floor(st.prog) : 1;
-        var amt = E.bizRevenue(s, b.id, now) * n;
+        // salários do ciclo saem da receita do próprio ciclo: o saldo nunca fica negativo e nada "some"
+        var gross = E.bizRevenue(s, b.id, now) * n, wages = Math.min(gross, E.bizCycleWages(s, b.id) * n);
+        var amt = gross - wages;
         earn(amt);
+        s.stats.wagesPaid = Math.min(S.BIG, s.stats.wagesPaid + wages);
         s.stats.bizRuns += n;
+        flow(st.mgr ? 'biz' : 'manual', gross); flow('wages', wages);
         if (st.mgr) st.prog -= n; else { st.prog = 0; st.running = false; }
         emit('bizPay', { id: b.id, amount: amt });
       }
     });
 
-    var passiveExtra = (E.salary(s) + E.rentGross(s) - E.rentUpkeep(s)) * dt;
-    if (passiveExtra > 0) earn(passiveExtra);
+    var sal = E.salary(s) * dt, rent = E.rentGross(s) * dt, rentUp = E.rentUpkeep(s) * dt;
+    if (sal + rent - rentUp > 0) earn(sal + rent - rentUp);
+    s.stats.rentUpkeepPaid = Math.min(S.BIG, s.stats.rentUpkeepPaid + rentUp);
+    flow('salary', sal); flow('rent', rent); flow('rentUp', rentUp);
+    flowTick(dt);
 
     // eventos
     if (s.events.length) s.events = s.events.filter(function (e) { return e.until > now; });
-    if (now >= s.nextEventAt) {
+    if (G.options.randomEvents && now >= s.nextEventAt) {
       s.nextEventAt = now + (90 + G.rng() * 120) * 1000;
       spawnEvent(now);
     }
@@ -493,7 +524,7 @@
     var steps = 0;
     while (s.mktAcc >= 1 && steps++ < 5) { s.mktAcc -= 1; M.step(s, G.rng); }
     if (s.mktAcc > 1) s.mktAcc = 0;
-    if (now >= s.nextNewsAt) {
+    if (G.options.randomEvents && now >= s.nextNewsAt) {
       s.nextNewsAt = now + (100 + G.rng() * 140) * 1000;
       var n = M.news(s, G.rng);
       s.news.unshift({ t: now, txt: n.txt, up: n.up, id: n.id });
@@ -608,7 +639,7 @@
     // ciclos manuais em andamento terminam enquanto o jogador está fora
     D.BUSINESSES.forEach(function (bz) {
       var st = s.biz[bz.id];
-      if (st.running && !st.mgr) { manual += E.bizRevenue(s, bz.id, now, true); st.running = false; st.prog = 0; }
+      if (st.running && !st.mgr) { manual += E.bizCycleNet(s, bz.id, now, true); st.running = false; st.prog = 0; }
     });
     amount += manual;
     // a bolsa continua mexendo (até 30 min simulados)
@@ -618,6 +649,9 @@
     if (!isFinite(amount) || amount < 0) amount = 0;
     earn(amount);
     s.stats.offlineEarned = Math.min(S.BIG, s.stats.offlineEarned + amount);
+    s.stats.wagesPaid = Math.min(S.BIG, s.stats.wagesPaid + b.empUpkeep * secs);
+    s.stats.rentUpkeepPaid = Math.min(S.BIG, s.stats.rentUpkeepPaid + b.rentUpkeep * secs);
+    G.resetFlow();
     s.lastSeen = s.clockMax = now;
     return {
       elapsed: elapsed, secs: secs, capped: elapsed > cap, capH: cap / 3600, amount: amount, rate: rate,
@@ -639,6 +673,7 @@
     var n = G.newState();
     Object.keys(keep).forEach(function (k) { n[k] = keep[k]; });
     G.s = n;
+    G.resetFlow();
     emit('prestige', { gain: gain });
     return gain;
   };
@@ -699,6 +734,7 @@
     var cur = read(G.KEYS.main);
     if (cur) store(G.KEYS.pre, cur); // ainda dá para desfazer pela restauração de backup
     G.s = G.newState();
+    G.resetFlow();
     G.save();
   };
 
@@ -712,6 +748,7 @@
     // o tempo entre exportar e importar não vira ganho offline (evita repetir o mesmo save para ganhar de novo)
     s.lastSeen = s.clockMax = Math.max(G.now(), s.clockMax);
     G.s = s;
+    G.resetFlow();
     G.save();
     return true;
   };
@@ -736,6 +773,7 @@
     store(G.KEYS.pre, JSON.stringify(G.s));
     s.lastSeen = s.clockMax = Math.max(G.now(), s.clockMax);
     G.s = s;
+    G.resetFlow();
     G.save();
     return true;
   };

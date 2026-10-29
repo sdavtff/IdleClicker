@@ -147,15 +147,22 @@
 
   E.rentUpkeep = function (s) { return E.rentGross(s) * D.PROP_UPKEEP; };
 
-  // Detalhamento da renda passiva (automatizada). Base para painel de finanças e ganhos offline.
+  /* Detalhamento da renda passiva (automatizada) por segundo. Base do painel de finanças e dos ganhos offline.
+   * Salários de funcionários são pagos a cada ciclo concluído, descontados da receita daquele ciclo
+   * (ver G.tick); por segundo isso equivale a bizUpkeep. Negócios sem gerente não entram no fluxo contínuo:
+   * só rendem quando o jogador toca — aparecem em `manual` (ciclos em andamento agora). */
   E.breakdown = function (s, now, noTemp) {
-    var biz = 0, emp = 0;
+    var biz = 0, emp = 0, manual = { running: 0, idle: 0, net: 0 };
     D.BUSINESSES.forEach(function (b) {
       var st = s.biz[b.id];
-      if (st && st.lvl > 0 && st.mgr) {
+      if (!st || st.lvl <= 0) return;
+      if (st.mgr) {
         biz += E.bizIncome(s, b.id, now, noTemp);
         emp += E.bizUpkeep(s, b.id);
-      }
+      } else if (st.running) {
+        manual.running++;
+        manual.net += E.bizCycleNet(s, b.id, now, noTemp);
+      } else manual.idle++;
     });
     var sal = E.salary(s), rent = E.rentGross(s), rentUp = E.rentUpkeep(s);
     return {
@@ -163,8 +170,16 @@
       empUpkeep: emp, rentUpkeep: rentUp,
       income: biz + sal + rent,
       expenses: emp + rentUp,
-      net: biz + sal + rent - emp - rentUp
+      net: biz + sal + rent - emp - rentUp,
+      manual: manual
     };
+  };
+
+  // Valor líquido de um ciclo (receita − salários do ciclo). Sempre positivo: a receita por ciclo é
+  // ≥ 0,5 × rev × nível × (1 + 0,5 × func.) e os salários do ciclo são ≤ 0,08 × func. × rev × nível.
+  E.bizCycleWages = function (s, id) { return E.bizUpkeep(s, id) * E.bizTime(s, id); };
+  E.bizCycleNet = function (s, id, now, noTemp) {
+    return Math.max(0, E.bizRevenue(s, id, now, noTemp) - E.bizCycleWages(s, id));
   };
 
   E.passiveIncome = function (s, now, noTemp) { return Math.max(0, E.breakdown(s, now, noTemp).net); };

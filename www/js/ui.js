@@ -515,7 +515,7 @@
           if (st.emp >= D.EMP_MAX) { btnLabel(c.emp, '👥 Equipe', 'completa'); cls(c.emp, 'off', false); }
           else { var ec = E.empCost(s, b.id); btnLabel(c.emp, '👥 ' + st.emp + '/' + D.EMP_MAX, F.money(ec)); cls(c.emp, 'off', s.cash < ec); }
           var producing = st.mgr || st.running;
-          var T = E.bizTime(s, b.id), rev = E.bizRevenue(s, b.id, now) - E.bizUpkeep(s, b.id) * T; // líquido de salários
+          var T = E.bizTime(s, b.id), rev = E.bizCycleNet(s, b.id, now); // líquido de salários do ciclo
           txt(c.ptxt, producing || st.mgr ? F.money(rev, true) + ' a cada ' + (T < 10 ? T.toFixed(1).replace('.', ',') + 's' : F.time(T))
             : '▶ Toque no ícone para produzir ' + F.money(rev, true));
           cls(c.ico, 'idle', !producing);
@@ -961,19 +961,26 @@
       }
       if (t === 'fin') {
         var b = E.breakdown(s, now), pv = E.portfolioValue(s), nw = E.netWorth(s);
-        var manual = D.BUSINESSES.filter(function (x) { return s.biz[x.id].lvl > 0 && !s.biz[x.id].mgr; }).length;
+        var mf = G.measuredFlow();
+        var neg = function (v) { return (v > 0 ? '-' : '') + F.money(v, true); };
         html(r.finInc, '<div class="kv">' +
-          '<span>🏪 Negócios automatizados</span><b class="pos">+' + F.money(b.biz, true) + '</b>' +
+          '<span>🏪 Negócios com gerente (receita)</span><b class="pos">+' + F.money(b.biz, true) + '</b>' +
+          '<span>👥 Salários de funcionários</span><b class="neg">' + neg(b.empUpkeep) + '</b>' +
           '<span>💼 Salário (carreira)</span><b class="pos">+' + F.money(b.salary, true) + '</b>' +
           '<span>🏠 Aluguéis</span><b class="pos">+' + F.money(b.rent, true) + '</b>' +
-          '<span>👥 Salários de funcionários</span><b class="neg">' + (b.empUpkeep > 0 ? '-' : '') + F.money(b.empUpkeep, true) + '</b>' +
-          '<span>🔧 Manutenção de imóveis</span><b class="neg">' + (b.rentUpkeep > 0 ? '-' : '') + F.money(b.rentUpkeep, true) + '</b>' +
+          '<span>🔧 Manutenção de imóveis</span><b class="neg">' + neg(b.rentUpkeep) + '</b>' +
           '<span><b>Resultado líquido</b></span><b class="' + (b.net >= 0 ? 'pos' : 'neg') + '">' + F.money(b.net, true) + '/s</b>' +
+          '<span>📏 Medido nos últimos ' + (mf ? Math.round(mf.secs) + ' s' : '60 s') + '</span><b>' + (mf ? '≈ ' + F.money(mf.net, true) + '/s' : 'medindo…') + '</b>' +
+          '</div>' +
+          (b.manual.running || b.manual.idle ? '<div class="fin-note">⚙️ Sem gerente: ' + (b.manual.running ? b.manual.running + ' em produção (+' + F.money(b.manual.net, true) + ' líquido ao concluir)' : '') +
+            (b.manual.running && b.manual.idle ? ' · ' : '') + (b.manual.idle ? b.manual.idle + ' parado(s) — toque no ícone para produzir' : '') + '. Esses ciclos entram no valor medido, não no fluxo contínuo.</div>' : '') +
+          '<div class="kv" style="margin-top:8px">' +
           '<span>👆 Valor do toque</span><b>' + F.money(E.tapValue(s, now), true) + '</b>' +
           '<span>⚡ Multiplicador global</span><b>x' + E.globalMult(s, now).toFixed(2).replace('.', ',') + '</b>' +
-          '<span>🏅 Conquistas</span><b>+' + Math.round(E.achCount(s) * D.ACH_BONUS * 100) + '%</b></div>' +
-          (manual ? '<div class="muted" style="margin-top:6px">⚙️ ' + manual + ' negócio(s) sem gerente: rendem só quando você toca neles e não entram no fluxo acima.</div>' : '') +
-          '<div class="muted" style="margin-top:6px">Funcionários só recebem enquanto o negócio produz. O fluxo inclui turbos e eventos ativos; os ganhos offline não.</div>');
+          '<span>🏅 Conquistas</span><b>+' + Math.round(E.achCount(s) * D.ACH_BONUS * 100) + '%</b>' +
+          '<span>Total já pago em salários</span><b>' + F.money(s.stats.wagesPaid) + '</b>' +
+          '<span>Total já pago em manutenção</span><b>' + F.money(s.stats.rentUpkeepPaid) + '</b></div>' +
+          '<div class="fin-note">Salários são pagos a cada ciclo concluído, descontados da receita daquele ciclo. O fluxo inclui turbos e eventos ativos; os ganhos offline não.</div>');
         html(r.finNw, '<div class="kv">' +
           '<span>💵 Dinheiro</span><b>' + F.money(s.cash) + '</b>' +
           '<span>📈 Ações e cripto</span><b>' + F.money(pv) + '</b>' +

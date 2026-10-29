@@ -118,9 +118,18 @@
     return isFinite(k) ? Math.min(k, D.MAX_BUY_PER_TAP, D.MAX_BIZ_LVL - lvl) : D.MAX_BUY_PER_TAP;
   };
 
+  // Funcionário n (0-based). Custo = o MENOR entre:
+  //   (a) fórmula original: 10 × preço-base × 2,6^n  — barata no início do jogo;
+  //   (b) renda-base do negócio no nível atual × EMP_COST_SEC × EMP_COST_GROWTH^n (piso: preço-base)
+  //       — mantém o retorno alcançável em negócios caros/avançados, onde (a) chegava a meses ou anos.
+  // Renda-base = sem multiplicadores globais, para o preço não variar com turbos, estrelas ou eventos.
+  // Nenhum funcionário ficou mais caro do que na v1.1.0.
   E.empCost = function (s, id) {
-    var b = BIZ[id], e = s.biz[id] ? s.biz[id].emp : 0;
-    return b.cost * 10 * Math.pow(2.6, e);
+    var b = BIZ[id], st = s.biz[id], lvl = st ? st.lvl : 0, e = st ? st.emp : 0;
+    var classic = b.cost * 10 * Math.pow(2.6, e);
+    var baseIncome = b.rev * lvl * E.milestoneMult(lvl) / b.t;
+    var scaled = Math.max(b.cost, baseIncome * D.EMP_COST_SEC) * Math.pow(D.EMP_COST_GROWTH, e);
+    return Math.min(classic, scaled);
   };
 
   E.skillCost = function (s, id) {

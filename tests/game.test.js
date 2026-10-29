@@ -774,3 +774,21 @@ test('custos crescem de forma monotônica e finita em toda a faixa de níveis', 
     assert.equal(G.buyBiz(b.id, 1), false, 'nível máximo não compra mais');
   }
 });
+
+test('custo de funcionário nunca supera a fórmula da v1.1.0 e é sempre finito e crescente', () => {
+  const s = fresh();
+  for (const b of D.BUSINESSES) {
+    for (const lvl of [1, 10, 25, 60, 150, 400]) {
+      s.biz[b.id].lvl = lvl;
+      let prev = 0;
+      for (let e = 0; e < D.EMP_MAX; e++) {
+        s.biz[b.id].emp = e;
+        const c = E.empCost(s, b.id);
+        assert.ok(Number.isFinite(c) && c > 0);
+        assert.ok(c <= b.cost * 10 * Math.pow(2.6, e) * (1 + 1e-12), `${b.id} lvl ${lvl} emp ${e}`);
+        assert.ok(c > prev);
+        prev = c;
+      }
+    }
+  }
+});

@@ -20,7 +20,7 @@
     { id: 'radio',  name: 'Rede Onda Viva',      cat: 'Mídia',        icon: '📺', color: '#9b5de5', cost: 2e5,   r: 1.13, rev: 8000,  t: 30,  mgr: 6e6,   mgrName: 'Âncora Bia' },
     { id: 'arena',  name: 'Arena Fênix',         cat: 'Esportes',     icon: '🏟️', color: '#f15bb5', cost: 2.5e6, r: 1.13, rev: 7e4,   t: 60,  mgr: 6e7,   mgrName: 'Técnico Duda' },
     { id: 'solar',  name: 'SolarVolt Energia',   cat: 'Energia',      icon: '⚡', color: '#f9c80e', cost: 3.5e7, r: 1.12, rev: 6.5e5, t: 120, mgr: 7e8,   mgrName: 'Engª Raissa' },
-    { id: 'banco',  name: 'Banco Cofre Dourado', cat: 'Bancos',       icon: '🏦', color: '#00bbf9', cost: 5e8,   r: 1.12, rev: 6e6,   t: 240, mgr: 1e10,  mgrName: 'Sr. Valença' }
+    { id: 'banco',  name: 'Banco Cofre Dourado', cat: 'Bancos',       icon: '🏦', color: '#00bbf9', cost: 5e8,   r: 1.12, rev: 6e6,   t: 240, mgr: 2e9,   mgrName: 'Sr. Valença' }
   ];
 
   // Marcos de nível: cada um dobra a receita do negócio.
@@ -28,7 +28,9 @@
 
   D.EMP_MAX = 10;          // funcionários por negócio
   D.EMP_BONUS = 0.5;       // +50% receita cada
-  D.EMP_UPKEEP = 0.08;     // salário: 8% da receita base por funcionário (só enquanto produz)
+  D.EMP_UPKEEP = 0.08;     // salário: 8% da receita base por funcionário, pago a cada ciclo concluído
+  D.EMP_COST_SEC = 30;     // custo escalado do funcionário: segundos de renda-base do negócio no nível atual
+  D.EMP_COST_GROWTH = 2.6; // × 2,6 a cada contratação (mesmo fator da fórmula original)
 
   // Carreira (sequencial e cumulativa). Fase inicial do jogo.
   D.JOBS = [

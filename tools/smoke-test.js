@@ -287,6 +287,68 @@ function check(name, ok, info) { results.push({ name, ok: !!ok, info }); console
   check('UI.update rápido (< 4 ms em média)', perf.upd < 4, perf.upd.toFixed(2) + ' ms');
   check('Sem vazamento de elementos após 400 toques', perf.fx === 0 && Math.abs(perf.n1 - perf.n0) < 40, JSON.stringify(perf));
 
+  // ---- v1.1.1: funcionalidades revisadas ----
+  await page.evaluate(() => { document.getElementById('toasts').innerHTML = ''; UI.go('home'); });
+  // detalhe da meta ao tocar
+  await page.locator('#goals .goal.short').click();
+  await page.waitForSelector('.modal');
+  check('Tocar numa meta abre o detalhe com progresso', /Meta de curto prazo/.test(await page.locator('.modal').innerText()));
+  await page.locator('.modal .btn').click();
+  // rever tutorial com etapas já cumpridas: não pula sozinho
+  await page.locator('#tabbar [data-tab=more]').click();
+  await page.locator('#scr-more .seg button', { hasText: 'Ajustes' }).click();
+  await page.locator('#scr-more button', { hasText: 'Rever tutorial' }).click();
+  await wait(700);
+  const t0 = await page.evaluate(() => G.s.tutorial);
+  check('Rever tutorial mostra a 1ª etapa e espera o jogador', t0 === 0 && await page.locator('.tut-bubble .btn', { hasText: 'Próximo' }).isVisible(), 'etapa=' + t0);
+  for (let i = 0; i < 4; i++) { await page.locator('.tut-bubble .btn').first().click(); await wait(250); }
+  await page.locator('.tut-bubble .btn', { hasText: 'Vamos lá' }).click();
+  check('Tutorial revisto termina normalmente', await page.evaluate(() => G.s.tutorial) === -1 && await page.locator('.tut-bubble').count() === 0);
+  // interruptores acessíveis
+  await page.locator('#tabbar [data-tab=more]').click();
+  await page.locator('#scr-more .seg button', { hasText: 'Ajustes' }).click();
+  const sw = page.locator('button.toggle', { hasText: 'Vibração' });
+  const a1 = await sw.getAttribute('aria-checked');
+  await sw.click(); await wait(250);
+  const a2 = await sw.getAttribute('aria-checked');
+  await sw.click(); await wait(250);
+  check('Interruptor inteiro é clicável e informa estado (aria-checked)', a1 !== a2 && (a2 === 'true' || a2 === 'false'), a1 + '→' + a2);
+  // painel financeiro: linhas novas e coerentes
+  await page.evaluate(() => { G.earn(1e7); G.buyBiz('pixel', 5); G.hireEmployee('pixel'); G.runBiz('pixel'); });
+  await page.locator('#scr-more .seg button', { hasText: 'Finanças' }).click();
+  await wait(400);
+  const fin = await page.locator('#scr-more').innerText();
+  check('Painel mostra salários, produção manual, medido e totais pagos',
+    /Salários de funcionários/.test(fin) && /Sem gerente/.test(fin) && /Medido nos últimos/.test(fin) && /Total já pago em salários/.test(fin));
+  // exceção no laço não congela o jogo
+  const errBefore = errors.length;
+  const resil = await page.evaluate(async () => {
+    const orig = UI.frame; let thrown = false;
+    UI.frame = function () { if (!thrown) { thrown = true; throw new Error('erro de teste proposital'); } return orig.apply(this, arguments); };
+    const p0 = G.s.stats.playSec;
+    await new Promise(r => setTimeout(r, 1200));
+    UI.frame = orig;
+    return { thrown, advanced: G.s.stats.playSec - p0 };
+  });
+  errors.splice(errBefore); // o erro proposital não conta
+  check('Jogo continua rodando após uma exceção no laço', resil.thrown && resil.advanced > 0.5, JSON.stringify(resil));
+  // estado extremo: números gigantes não viram NaN/Infinity na tela
+  const extreme = await page.evaluate(async () => {
+    const s = G.s;
+    s.cash = 1e300; s.lifetimeEarned = 1e300; s.runEarned = 1e300;
+    D.BUSINESSES.forEach(b => { s.biz[b.id].lvl = 5000; s.biz[b.id].mgr = true; s.biz[b.id].emp = 10; });
+    G.buyBiz('suco', 'max'); G.buyAsset('GATO', 'max');
+    const bad = [];
+    for (const tab of ['home', 'biz', 'inv', 'lux', 'more']) {
+      UI.go(tab); UI.update();
+      const t = document.body.innerText;
+      if (/NaN|Infinity|undefined/.test(t)) bad.push(tab);
+    }
+    return { bad, cash: s.cash, finite: Number.isFinite(s.cash) };
+  });
+  check('Estado extremo (1e300) sem NaN/Infinity/undefined na interface', extreme.bad.length === 0 && extreme.finite, JSON.stringify(extreme));
+  await page.evaluate(() => { G.reset(); G.s.tutorial = -1; UI.go('home'); });
+
   check('Nenhum erro de JS durante o teste', errors.length === 0, errors.slice(0, 3).join(' | '));
   await browser.close();
   server.close();

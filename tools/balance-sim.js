@@ -19,7 +19,7 @@ G.rng = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
 let clock = Date.UTC(2026, 9, 26, 12, 0, 0);
 G.now = () => clock;
 G.s = G.newState();
-G.options.randomEvents = false; // eventos aleatórios desligados para resultado reprodutível
+G.options.randomEvents = process.argv.includes('events'); // por padrão desligados (resultado reprodutível)
 let s = G.s;
 
 const marks = new Set((MINUTES > 120 ? Array.from({ length: Math.floor(MINUTES / 30) }, (_, i) => (i + 1) * 30)

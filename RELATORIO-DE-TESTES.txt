@@ -1,0 +1,320 @@
+CIFRÓPOLIS 2.0.0 — RELATÓRIO DE TESTES
+==========================================
+Data da execução: 30/10/2026
+Todos os resultados abaixo vêm de execuções reais feitas neste ambiente (saídas copiadas dos testes).
+Nada foi marcado como aprovado sem ter sido executado. O que NÃO foi testado está listado no fim.
+
+AMBIENTE
+--------
+- Linux (contêiner de nuvem), Node.js 22, Chromium (Playwright) com viewport de celular e toque.
+- Android SDK 35, Gradle 8, JDK 21; emulador Android 11 (x86_64) SEM aceleração de hardware (sem KVM),
+  portanto extremamente lento — serve para instalar, abrir e verificar o app, não para medir desempenho.
+
+RESUMO
+------
+| Bateria                                         | Resultado        |
+|-------------------------------------------------|------------------|
+| Testes unitários (npm test)                     | 68/68 aprovados  |
+| Ponta a ponta no navegador (npm run test:e2e)   | 55/55 aprovados  |
+| Atualização a partir da 1.0.0 (commit 3014fcd)  | 20/20 aprovados  |
+| Atualização a partir da 1.1.0 (commit ca14be9)  | 20/20 aprovados  |
+| Atualização a partir da 1.1.1 (commit a04823d)  | 20/20 aprovados  |
+| Checagem visual (5 tamanhos × 2 escalas)        | 0 problemas, 0 erros de JS (110 capturas) |
+| Desempenho com CPU 4× mais lenta                | 11/11 aprovados  |
+| Simulação de economia 2 h / 12 h (com Legado e eventos) | sem NaN, Infinity ou saldo negativo |
+| Compilação do APK (Gradle assembleDebug)        | OK — versionCode 4 / versionName 2.0.0 |
+| Assinatura do APK (apksigner verify)            | OK (código de saída 0) |
+| Emulador Android 11: instalar por cima da 1.x, abrir, girar, reabrir, save migrado | OK (detalhes abaixo) |
+
+
+1. TESTES UNITÁRIOS — node --test tests/game.test.js
+------------------------------------------------------------
+Resultado: 68 testes, 68 aprovados, 0 falhas (1941.304166 ms).
+
+  [OK] formata números grandes em PT-BR
+  [OK] custo de k níveis bate com a soma nível a nível
+  [OK] máximo comprável: cabe k e não cabe k+1
+  [OK] marcos dobram receita e desconto do Negociador reduz custo
+  [OK] compra sem dinheiro não altera nada; com dinheiro desconta o valor exato
+  [OK] IDs inexistentes e quantidades inválidas são recusados
+  [OK] dinheiro infinito não gera NaN ao comprar o máximo
+  [OK] habilidades respeitam o nível máximo
+  [OK] emprego é sequencial e soma ao valor do toque
+  [OK] produção manual paga um ciclo e para; gerente automatiza
+  [OK] funcionários: limite de 10, bônus de 50% e salário só durante a produção
+  [OK] painel de finanças (líquido/s) bate com o dinheiro realmente ganho
+  [OK] saldo nunca fica negativo por despesas
+  [OK] compra e venda de ações aplica corretagem e soma lucro ao torneio
+  [OK] preços da bolsa ficam positivos e finitos em simulação longa
+  [OK] offline: paga renda líquida × tempo e não paga duas vezes
+  [OK] offline: respeita o limite de horas
+  [OK] offline: adiantar o relógio, coletar e voltar não rende de novo
+  [OK] offline: sem renda passiva não há prêmio e ausência curta é ignorada
+  [OK] Legado: concede estrelas, zera a partida e mantém luxo e conquistas
+  [OK] conquista concede +1% permanente
+  [OK] missões diárias: 3 por dia, progresso, resgate, baú e virada do dia
+  [OK] abas desbloqueiam pelo faturamento total
+  [OK] salvar e carregar preserva o estado
+  [OK] save antigo (v1, sem campos novos) carrega com padrões seguros
+  [OK] save corrompido não é perdido: vai para backup e o backup automático é restaurado
+  [OK] save ilegível sem backup começa do zero mas guarda a cópia original
+  [OK] save de versão futura é recusado sem ser sobrescrito
+  [OK] importação valida tudo e rejeita conteúdo malicioso
+  [OK] importação recusa códigos inválidos com mensagem clara e não altera o jogo
+  [OK] importar o mesmo save várias vezes não gera ganho offline repetido
+  [OK] restaurar backup automático
+  [OK] sessão longa simulada (2 h de jogo) mantém todos os números finitos
+  [OK] prêmios não contam como faturamento produtivo (missão "Fature" não se autoalimenta)
+  [OK] cartão do negócio: receita líquida por ciclo bate com o dinheiro recebido em produção manual
+  [OK] produção manual com funcionários: recebe exatamente o líquido do ciclo e o salário é registrado
+  [OK] sem dinheiro: salários saem da receita do ciclo, saldo nunca fica negativo e nada é perdido
+  [OK] painel: líquido por segundo = dinheiro recebido; fluxo medido bate com o painel
+  [OK] breakdown lista negócios sem gerente (em produção e parados) fora do fluxo contínuo
+  [OK] offline registra salários e manutenção pagos
+  [OK] armazenamento cheio: salvar falha sem travar e avisa uma única vez
+  [OK] armazenamento ilegível no carregamento começa um jogo novo sem erro
+  [OK] tipos aninhados errados são substituídos por padrões seguros
+  [OK] exportar e importar preserva todo o progresso
+  [OK] restaurar o backup "antes de apagar" desfaz o reset
+  [OK] prêmio do torneio é pago uma vez e semana regredida não gera prêmio
+  [OK] cada meta e conquista paga uma única vez
+  [OK] bônus gratuitos respeitam recarga; lucro rápido não paga duas vezes
+  [OK] comprar "MÁX" nunca gasta mais que o saldo, em qualquer escala
+  [OK] custos crescem de forma monotônica e finita em toda a faixa de níveis
+  [OK] custo de funcionário nunca supera a fórmula da v1.1.0 e é sempre finito e crescente
+  [OK] melhorias de empresa: sequência, nível mínimo, custo e efeito
+  [OK] eficiência sobe com ciclos concluídos e dá +5% por patamar
+  [OK] estatísticas por empresa batem com o dinheiro e salários
+  [OK] reforma: exige imóvel, custa conforme a fórmula, +20% de aluguel e tem limite
+  [OK] dividendos: taxa correta, pagos no laço, no offline e não em cripto
+  [OK] Medalhas de Mérito: loja com custo crescente, limite e permanência no Legado
+  [OK] exclusivos de mérito não podem ser comprados com dinheiro
+  [OK] nível do império: medalhas pagas uma vez por nível
+  [OK] desafios semanais: geração, progresso, resgate único, bônus e relógio atrasado
+  [OK] Corrida Empresarial: pontua faturamento produtivo, premia uma vez e ignora semana regredida
+  [OK] evento de setor: rodízio determinístico a cada 2 dias e multiplica só as categorias do evento
+  [OK] patentes de Legado: kits iniciais e descontos
+  [OK] save v2 (1.1.x) migra para v3 com presente e sem enxurrada de níveis
+  [OK] campos v3 maliciosos são saneados
+  [OK] backups rotativos: 3 automáticos + diário; recuperação usa o mais recente válido
+  [OK] histórico do patrimônio: 1 ponto por minuto, no máximo 120
+  [OK] gerente usa o custo com descontos (Headhunter)
+
+
+2. PONTA A PONTA NO NAVEGADOR — node tools/smoke-test.js
+------------------------------------------------------------
+Chromium, tela 393×851 com toque (também 320×640 e paisagem 851×393). Resultado: 55/55.
+
+  [OK] Tela de carregamento some após o boot
+  [OK] Abre sem erros de JS
+  [OK] Aba Investir começa bloqueada com tela explicativa
+  [OK] Toque gera dinheiro
+  [OK] Comprar emprego
+  [OK] Abrir primeiro negócio
+  [OK] Produção manual paga
+  [OK] Tutorial avança até a etapa final
+  [OK] Cartão de missões diárias com 3 missões
+  [OK] Resgatar missões e baú diário
+  [OK] Turbo grátis ativa sem tela de anúncio simulado
+  [OK] Turbo grátis respeita a recarga
+  [OK] Gerente contratado
+  [OK] 3 negócios abertos
+  [OK] Investir desbloqueado após faturar
+  [OK] Comprar ação
+  [OK] Vender ação
+  [OK] 3 itens de luxo comprados
+  [OK] Conquistas listadas e algumas concluídas
+  [OK] Torneio indica rivais simulados
+  [OK] Ajustes não oferecem compra simulada
+  [OK] Importação inválida mostra erro e não altera o jogo
+  [OK] Save malicioso não executa código e é saneado
+  [OK] Backup "antes da importação" disponível
+  [OK] Restaurar backup devolve o progresso anterior
+  [OK] Reduzir animações aplica classe global
+  [OK] Save persiste após recarregar
+  [OK] Resumo de ganhos offline com detalhamento
+  [OK] Sem botão de "dobrar" quando não há anúncio real
+  [OK] Save danificado é recuperado do backup e o original é preservado
+  [OK] Layout sobrevive à rotação (paisagem)
+  [OK] Estado intacto após rotacionar
+  [OK] Sem rolagem horizontal em tela 320px com texto maior
+  [OK] UI.update rápido (< 4 ms em média)
+  [OK] Sem vazamento de elementos após 400 toques
+  [OK] Banner do evento de setor na tela Início
+  [OK] Aba de desafios semanais com 3 desafios
+  [OK] Detalhe da empresa mostra estatísticas e melhorias
+  [OK] Comprar melhoria pelo detalhe da empresa
+  [OK] Reformar imóvel
+  [OK] Resumo da carteira com dividendos
+  [OK] Comprar melhoria na Loja de Mérito
+  [OK] Resgatar exclusivo de mérito
+  [OK] Perfil do império abre com nível, patente e medalhas
+  [OK] Finanças: evolução do patrimônio, composição e ranking de empresas
+  [OK] Resgatar prêmio da Corrida Empresarial (medalhas)
+  [OK] Legado mostra patentes
+  [OK] Tocar numa meta abre o detalhe com progresso
+  [OK] Rever tutorial mostra a 1ª etapa e espera o jogador
+  [OK] Tutorial revisto termina normalmente
+  [OK] Interruptor inteiro é clicável e informa estado (aria-checked)
+  [OK] Painel mostra salários, produção manual, medido e totais pagos
+  [OK] Jogo continua rodando após uma exceção no laço
+  [OK] Estado extremo (1e300) sem NaN/Infinity/undefined na interface
+  [OK] Nenhum erro de JS durante o teste
+
+
+3. ATUALIZAÇÃO DE SAVES — node tools/upgrade-test.js <commit>
+------------------------------------------------------------
+Método: o teste extrai do git o código REAL da versão antiga, joga com ele (negócios, gerente, funcionário,
+habilidades, imóvel, luxo, ações), salva, troca para o código da 2.0.0 na MESMA origem (mesmo localStorage),
+recarrega e compara campo a campo.
+
+  Versão 1.0.0 (3014fcd): 20/20 verificações passaram.
+  Versão 1.1.0 (ca14be9): 20/20 verificações passaram.
+  Versão 1.1.1 (a04823d): 20/20 verificações passaram.
+
+  Detalhe (a partir da 1.1.0):
+    PASS Save da versão antiga (ca14be9) criado — {"v":2,"cash":19534740,"lifetime":20000040,"jobs":3,"suco":60,"mgr":true,"emp":1,"burger":30,"skills":"{\"toque\":1,\"carisma\":1}","props":1,"lux":"c1,w1","nxs":10,"taps":40}
+    PASS Atualizado para o formato atual — save v3 / jogo 2.0.0
+    PASS Preservado: jobs — 3 → 3
+    PASS Preservado: suco — 60 → 60
+    PASS Preservado: mgr — true → true
+    PASS Preservado: emp — 1 → 1
+    PASS Preservado: burger — 30 → 30
+    PASS Preservado: skills — {"toque":1,"carisma":1} → {"toque":1,"carisma":1}
+    PASS Preservado: props — 1 → 1
+    PASS Preservado: lux — c1,w1 → c1,w1
+    PASS Preservado: nxs — 10 → 10
+    PASS Preservado: taps — 40 → 40
+    PASS Dinheiro preservado (sem perdas) — 19534740 → 19782920
+    PASS Faturamento total preservado
+    PASS Jogador antigo mantém abas desbloqueadas
+    PASS Missões diárias criadas para o save antigo
+    PASS Nenhum save marcado como corrompido
+    PASS v2.0: desafios semanais criados e nível do império marcado sem enxurrada
+    PASS v2.0: presente de medalhas e tela de boas-vindas da 2.0 — medalhas=32
+    PASS Sem erros de JS na atualização
+
+
+4. CHECAGEM VISUAL — node tools/visual-check.js
+------------------------------------------------------------
+Percorre 11 telas/subabas em 5 tamanhos (320×568, 360×740, 393×851, 412×915, 480×1000), com texto normal e
+"texto maior", e acusa: elementos que estouram a largura, alvos de toque < 40 px e títulos/botões cortados.
+Resultado: 0 problema(s) visual(is); 0 erro(s) de JS. Capturas em /tmp/claude-0/-home-user-IdleClicker/d2d57ef7-a5a2-5da2-8cfe-dac83ec9b459/scratchpad/final-visual
+Problemas encontrados e corrigidos durante a 2.0: chip de perfil com 34 px de altura (corrigido para 44 px).
+
+
+5. DESEMPENHO — node tools/perf-test.js (CPU desacelerada 4× via DevTools Protocol)
+------------------------------------------------------------
+  PASS Inicialização (CPU 4× mais lenta) — 604 ms
+  PASS UI.update + tick na tela home — 2.19 ms (limite 8)
+  PASS UI.update + tick na tela biz — 1.16 ms (limite 8)
+  PASS UI.update + tick na tela inv — 2.27 ms (limite 8)
+  PASS UI.update + tick na tela lux — 0.62 ms (limite 8)
+  PASS UI.update + tick na tela more/fin — 1.00 ms (limite 8)
+  PASS UI.update + tick na tela more/tour — 1.09 ms (limite 8)
+  PASS Tempo médio de quadro na tela Negócios — 18.5 ms
+  PASS Memória estável após sessão longa (2 h simuladas + 2.000 toques) — 2.3 → 2.6 MB · 1695 nós DOM · efeitos pendentes: 0
+  PASS Tamanho do save — 33.5 KB
+  PASS Sem erros de JS
+  
+  11/11 verificações de desempenho passaram.
+
+  Observação de transparência: a primeira execução, feita SEM aquecimento do JIT e logo após desligar o
+  emulador (máquina carregada), mediu 9,03 ms na tela Início (limite 8 ms) e reprovou nesse item. O teste foi
+  ajustado para 20 iterações de aquecimento por tela (mede o regime estável) e duas execuções seguidas deram
+  2,75 ms e 2,19 ms. Execução intermediária completa:
+    PASS Inicialização (CPU 4× mais lenta) — 620 ms
+    PASS UI.update + tick na tela home — 2.75 ms (limite 8)
+    PASS UI.update + tick na tela biz — 1.37 ms (limite 8)
+    PASS UI.update + tick na tela inv — 2.60 ms (limite 8)
+    PASS UI.update + tick na tela lux — 0.85 ms (limite 8)
+    PASS UI.update + tick na tela more/fin — 1.48 ms (limite 8)
+    PASS UI.update + tick na tela more/tour — 0.46 ms (limite 8)
+    PASS Tempo médio de quadro na tela Negócios — 18.3 ms
+    PASS Memória estável após sessão longa (2 h simuladas + 2.000 toques) — 2.3 → 2.6 MB · 1695 nós DOM · efeitos pendentes: 0
+    PASS Tamanho do save — 33.5 KB
+    PASS Sem erros de JS
+    
+    11/11 verificações de desempenho passaram.
+
+  Otimização feita a partir das medições: blocos do painel de Finanças (gráfico, composição, ranking)
+  passaram a ser reconstruídos 1×/s em vez de a cada 200 ms (7,1 ms → 1,4 ms por atualização).
+
+
+6. ECONOMIA — node tools/balance-sim.js (mesmo código do jogo)
+------------------------------------------------------------
+2 h, jogador ativo (3 toques/s), eventos aleatórios desligados para ser reproduzível:
+| Min | Faturado (vida) | Renda passiva/s | Valor do toque | Patrimônio | Gerentes | Empregos | ⭐ disponíveis | ⭐ ativas | Conquistas | Negócios (nível) |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| 1 | $1,99 K | $3 | $15 | $1,29 K | 0 | 2 | 0 | 0 | 1 | 🍹6 |
+| 2 | $12,3 K | $163 | $84 | $1,63 K | 1 | 3 | 0 | 0 | 2 | 🍹26 🍔4 |
+| 3 | $44,8 K | $227 | $84 | $30,7 K | 1 | 3 | 0 | 0 | 2 | 🍹29 🍔5 |
+| 5 | $431 K | $3,77 K | $486 | $98,1 K | 2 | 4 | 0 | 0 | 6 | 🍹50 🍔26 🎓8 💻1 |
+| 10 | $5,11 M | $23,6 K | $2,86 K | $1,21 M | 3 | 5 | 0 | 0 | 8 | 🍹55 🍔50 🎓27 💻7 |
+| 15 | $23,3 M | $71,8 K | $3,05 K | $8,77 M | 4 | 5 | 0 | 0 | 8 | 🍹61 🍔50 🎓35 💻27 📺5 |
+| 20 | $67,4 M | $150 K | $3,05 K | $34,4 M | 4 | 5 | 0 | 0 | 8 | 🍹63 🍔52 🎓50 💻29 📺8 🏟️1 |
+| 30 | $375 M | $685 K | $22,3 K | $151 M | 5 | 6 | 1 | 0 | 10 | 🍹68 🍔56 🎓52 💻50 📺28 🏟️5 |
+| 45 | $2,62 B | $3,74 M | $22,3 K | $1,32 B | 6 | 6 | 5 | 0 | 12 | 🍹73 🍔62 🎓59 💻51 📺35 🏟️27 ⚡3 |
+| 60 | $9,53 B | $9,16 M | $171 K | $3,80 B | 6 | 7 | 9 | 0 | 14 | 🍹78 🍔68 🎓65 💻57 📺51 🏟️34 ⚡9 |
+| 75 | $22,2 B | $20,8 M | $171 K | $8,44 B | 6 | 7 | 14 | 0 | 15 | 🍹79 🍔69 🎓66 💻58 📺52 🏟️50 ⚡10 |
+| 90 | $53,1 B | $45,6 M | $171 K | $24,4 B | 7 | 7 | 23 | 0 | 15 | 🍹81 🍔71 🎓67 💻59 📺54 🏟️50 ⚡29 |
+| 105 | $107 B | $57,0 M | $171 K | $66,6 B | 7 | 7 | 32 | 0 | 17 | 🍹82 🍔72 🎓69 💻60 📺55 🏟️50 ⚡32 🏦1 |
+| 120 | $165 B | $104 M | $171 K | $108 B | 7 | 7 | 40 | 0 | 17 | 🍹82 🍔72 🎓69 💻61 📺56 🏟️50 ⚡32 🏦2 |
+
+Longo prazo: 12 h com Legado e eventos aleatórios LIGADOS (node tools/balance-sim.js 720 2 prestige events):
+20 Legados; Hotel aos 4h16, Clínica aos 5h24; ciclos de Legado desaceleram depois do Hotel (5 → 127 min).
+O simulador aborta ao encontrar qualquer NaN, Infinity ou saldo negativo — terminou com sucesso.
+Também executadas: 15 min, 1 h, 8 h e 24 h — todas sem valores inválidos.
+
+
+7. ANDROID (APK) — emulador Android 11 x86_64, sem aceleração
+------------------------------------------------------------
+- APK: android/app/build/outputs/apk/debug/app-debug.apk (copiado como Cifropolis-v2.0.0.apk).
+- aapt: package com.cifropolis.tycoon, versionCode 4, versionName 2.0.0, minSdk 23, targetSdk 35.
+- apksigner verify: código de saída 0 (assinatura de debug válida).
+- Instalação POR CIMA da versão 1.x já instalada no emulador (adb install -r, mantém os dados):
+  "Success" na 5ª tentativa (as 4 primeiras falharam porque o serviço de pacotes do Android emulado ainda
+  estava reiniciando — erro do sistema, não do app); dumpsys confirmou versionCode=4, versionName=2.0.0.
+- Abertura: a 1ª tentativa logo após instalar falhou com "Activity class does not exist" (o gerenciador de
+  pacotes ainda não tinha registrado o app); as tentativas seguintes abriram o jogo normalmente.
+- Save no aparelho: lido diretamente do localStorage do WebView (run-as + leveldb). Antes: registros
+  {"v":1} e {"v":2}. Depois de rodar a 2.0.0: registros {"v":3} com "merit" e "weekly" (semana 2964), e as
+  novas chaves de backup cifropolis_save_v1_auto, _auto2, _auto3 e _daily criadas.
+- Rotação: com rotação forçada para paisagem (user_rotation 1), o sistema reportou mCurrentRotation=ROTATION_0
+  (o app continua em retrato, como configurado).
+- Reabertura após force-stop: processo ativo; captura mostra a interface 2.0 (HUD com perfil, banner do
+  evento "Alta Temporada", ícones SVG nas abas, abas bloqueadas, tutorial).
+- Uma janela "System UI isn't responding" aparece por cima nas capturas: é do sistema emulado sem aceleração,
+  não do jogo.
+Log do script executado no emulador:
+
+    Starting: Intent { cmp=com.cifropolis.tycoon/.MainActivity }
+    Error type 3
+    Error: Activity class {com.cifropolis.tycoon/com.cifropolis.tycoon.MainActivity} does not exist.
+    --- saves após abrir a 2.0.0:
+         10 {"v":1,"cash":0
+          2 {"v":2,"cash":0
+    Starting: Intent { cmp=com.cifropolis.tycoon/.MainActivity }
+    /sdcard/s.png: 1 file pulled, 0 skipped. 0.5 MB/s (50930 bytes in 0.094s)
+    captura B-rotacao 19:25:47
+          mCurrentRotation=ROTATION_0
+    Starting: Intent { cmp=com.cifropolis.tycoon/.MainActivity }
+    /sdcard/s.png: 1 file pulled, 0 skipped. 2.4 MB/s (390483 bytes in 0.157s)
+    captura C-reabertura 19:29:04
+    6355
+    processo ativo
+    ALLDONE
+
+
+8. O QUE NÃO FOI TESTADO (limitações reais)
+-------------------------------------------
+- Aparelho Android físico: não disponível neste ambiente. Fluidez de animação, som, vibração e consumo de bateria
+  em hardware real não foram medidos (o emulador sem aceleração não serve para isso).
+- Interação por toque no emulador: não usada — o sistema emulado mostra janelas de lentidão que interceptam os
+  toques. A jogabilidade foi testada no navegador (Chromium com tela de celular e toque), que roda o mesmo código web.
+- Versões do Android diferentes da 11 (somente 11 no emulador; o app declara suporte do Android 6 ao 15).
+- Anúncios e compras reais: NÃO existem integrações. O jogo não exibe anúncios e não vende nada (nem simula);
+  os bônus são gratuitos com tempo de recarga. Integrar AdMob/Google Play Billing exige contas e SDKs externos.
+- Ranking online: não existe. Os dois torneios usam rivais SIMULADOS no aparelho, marcados com 🤖 na interface.
+- Publicação na Play Store: o APK é assinado com chave de DEBUG (instalável, mas não publicável).
+

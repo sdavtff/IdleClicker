@@ -1,0 +1,149 @@
+CIFRÓPOLIS 2.0.0 — RELATÓRIO DE MELHORIAS
+============================================
+Versão anterior analisada: 1.1.0 (APK entregue) e 1.1.1 (correções posteriores, mesma base).
+Arquitetura preservada: HTML5/JS puro + Capacitor 7 (Android). Nada foi reescrito do zero; todos os sistemas
+existentes foram mantidos (negócios, bolsa, cripto, imóveis, habilidades, carreira, luxo, Legado, metas,
+conquistas, missões diárias, ganhos offline, eventos, torneio, salvamento e backups).
+
+
+1. ANÁLISE DO PROJETO (antes de modificar)
+------------------------------------------
+- APK 1.1.0 e 1.1.1 descompactados: o conteúdo web (assets/public) é idêntico ao código-fonte das versões
+  (só os stubs cordova.js do Capacitor diferem). 228 KB de jogo web, sem código nativo próprio; permissão
+  INTERNET (padrão do Capacitor; o jogo não usa rede). minSdk 23 (Android 6), targetSdk 35 (Android 15).
+- Economia: fórmulas em www/js/economy.js (custo exponencial, marcos x2, funcionários, multiplicadores);
+  regras em game.js; mercado em market.js; validação de save em save.js.
+- Pontos fracos identificados para a 2.0:
+  * Negócios só tinham nível/funcionários/gerente — sem melhorias, estatísticas ou ranking.
+  * Ações sem utilidade além de especular; imóveis sem evolução; patrimônio sem histórico.
+  * Nenhuma meta-progressão além do Legado (sem patentes/vantagens); 1 único torneio; sem desafios semanais.
+  * Visual baseado em emojis, sem ícones próprios, sem transições entre telas nem efeitos de compra.
+  * Bug: o botão de gerente mostrava e comparava o preço-base (ignorava descontos) — corrigido.
+  * Bug: o laço lento repassava sempre 0,25 s aos sistemas de meta em quadros longos — corrigido.
+
+
+2. MELHORIAS VISUAIS
+--------------------
+- Identidade original mantida (roxo-noite, dourado, menta), com acabamento novo:
+  superfícies com profundidade e brilho superior, tipografia com números tabulares, sombras mais suaves.
+- Ícones SVG próprios na barra de abas, com indicador animado da aba ativa.
+- Transições direcionais ao trocar de aba (desliza para a frente/para trás).
+- Efeitos: partículas e anel ao comprar, brilho dourado ao subir marco/melhoria, saldo com contagem animada,
+  partículas maiores ao resgatar baús e prêmios.
+- HUD: chip de perfil (nível do império · estrelas · medalhas) que abre a janela "Seu império", e barra de
+  progresso do nível do império.
+- Cartões de empresa: faixa com a cor do setor, selos (categoria, setor em alta 🔥, eficiência, melhorias),
+  barra de progresso até o próximo marco, pílula da próxima melhoria e botão de detalhes.
+- Gráficos: preço das ações com escala e marcador; novo gráfico de evolução do patrimônio; barras de
+  composição da renda.
+- Painéis organizados com grade de resumo (empresas, carteira, imóveis, finanças).
+- Banner do evento de setor na tela Início e na tela Negócios.
+- Áreas de toque ≥ 44 px (checadas automaticamente em 5 tamanhos de tela); "reduzir animações" também
+  desliga os efeitos novos.
+
+
+3. SISTEMA DE NEGÓCIOS
+----------------------
+- 4 novas empresas de fim de jogo (12 no total), em 4 novas categorias:
+  🏨 Rede Aurora Hotéis (Turismo), 🏥 Clínica Vida Plena (Saúde), 🚚 TransCifra Logística (Logística),
+  🛰️ Órbita Cifrão Espacial (Aeroespacial) — cada uma com gerente próprio.
+- Melhorias individuais (3 por empresa, em sequência): Campanha de marketing (nível 25, receita ×1,5),
+  Automação da produção (nível 75, ciclos 25% mais rápidos), Expansão regional (nível 150, receita ×2).
+- Bônus por produtividade (Eficiência): +5% de receita por patamar de ciclos concluídos (100 a 1 milhão).
+- Estatísticas individuais: ciclos concluídos, faturado na partida, salários pagos, lucro por ciclo,
+  tempo de ciclo, renda/s e todos os multiplicadores, na janela de detalhes da empresa.
+- Ranking das empresas mais lucrativas (Mais › Finanças), com participação na renda.
+- Novos objetivos empresariais: metas e conquistas de melhorias, eficiência, 12 empresas, Órbita Espacial.
+- Eventos de setor: a cada 2 dias, duas categorias ficam +25% (rodízio fixo de 6 eventos, vale offline).
+
+
+4. ECONOMIA E INVESTIMENTOS
+---------------------------
+Auditoria (as correções de salário, produção manual e painel financeiro feitas na 1.1.1 continuam valendo e
+foram retestadas): salários são pagos a cada ciclo concluído, descontados da receita do próprio ciclo, inclusive
+na produção manual; o painel mostra exatamente o que é creditado e descontado (testado: diferença < 1%).
+Novidades:
+- Dividendos: as 7 ações pagam 0,4% a 3% do preço por hora, continuamente e também offline. Cripto não paga.
+- Mercado: 2 novas ações (Aurora Energia, Mel Doce Alimentos) e 1 nova cripto (LuaToken).
+- Resumo da carteira: valor, lucro/prejuízo total, dividendos por hora, total recebido em dividendos.
+- Imóveis: 2 novos (Resort Costa Dourada, Arranha-céu Cifrão) e reformas (+20% de aluguel por nível, até 10).
+- Patrimônio: inclui melhorias e reformas; histórico com 1 amostra por minuto (até 2 h) e gráfico.
+- Relatórios: composição da renda (negócios, aluguéis, dividendos, salário), ranking de empresas, totais de
+  salários, manutenção, dividendos e ganhos offline.
+Balanceamento (medido com o simulador, que usa o mesmo código do jogo):
+- Cada sistema novo teve seu impacto medido isoladamente e foi calibrado: melhorias 10–100× mais caras,
+  evento de setor de +50% para +25%, Luvas de Ouro mais caras, degraus de custo das empresas novas de ~14×
+  para 10.000× (com r = 1,15) — sem isso os Legados aceleravam para 4 minutos e as estrelas explodiam.
+- Resultado: primeira sessão ~2× mais rápida que a 1.1.1 (165 B e 40 ⭐ às 2 h, antes 84 B e 28 ⭐);
+  depois do Hotel os ciclos de Legado desaceleram; Logística e Espaço ficam como objetivos de longo prazo.
+- O bônus das estrelas NÃO foi alterado (não enfraquece o progresso de quem já joga).
+
+
+5. NOVOS SISTEMAS E CONTEÚDOS
+-----------------------------
+- Medalhas de Mérito 🎖️: ganhas jogando (conquistas +1, Legado 5+, desafios semanais, torneios, nível do
+  império). Nunca vendidas por dinheiro real.
+- Loja de Mérito (aba Luxo): 6 melhorias permanentes (mantidas no Legado) — Luvas de Ouro, Cofre Noturno,
+  Contador Ágil, Headhunter, Consultoria de Elite, Fundo Fiduciário — e 2 itens exclusivos de luxo.
+- Desafios semanais: 3 por semana (7 tipos), dinheiro + medalhas, bônus de "semana perfeita".
+- Missões diárias: 6 novos tipos (14 no total).
+- Conquistas: 20 novas (51 no total).
+- Itens de luxo: 7 novos (20 no total), com a categoria Mansões & Ilhas e Exclusivos de Mérito.
+- Segundo torneio semanal — Corrida Empresarial: pontuação = faturamento produtivo na semana (prêmios não
+  contam). Regras, pontuação e prêmios consistentes nos dois torneios (dinheiro + medalhas; turbo só no da
+  bolsa). Rivais SIMULADOS, marcados com 🤖 e identificados como simulados na interface.
+- Nível do império: sobe a cada meia ordem de grandeza de faturamento total, com medalhas; nunca diminui.
+
+
+6. PROGRESSÃO
+-------------
+- Início acessível preservado (tutorial de 1 minuto, abas desbloqueadas aos poucos).
+- Metas de curto, médio e longo prazo ampliadas (novas metas acrescentadas no fim das listas, preservando o
+  progresso salvo); meta de longo prazo de nível do império e 100 estrelas.
+- Novos níveis de prestígio: patentes de Legado (Fundador → Herdeiro 10 ⭐ → Barão 100 → Conde 1 mil →
+  Duque 10 mil → Magnata Imperial 100 mil → Lenda Eterna 1 milhão), cada uma com vantagem real ao recomeçar
+  (dinheiro e emprego iniciais, negócios já com gerente, +2h offline, gerentes mais baratos, +25% de receita).
+- O Legado agora também rende Medalhas de Mérito; Loja de Mérito, conquistas e nível do império permanecem.
+
+
+7. SALVAMENTO E SEGURANÇA
+-------------------------
+- Save v3 compatível com os saves das versões 1.0.0, 1.1.0 e 1.1.1 (testado com o código real de cada uma).
+- Todos os campos novos são validados (tipo, faixa, IDs conhecidos); dados maliciosos são saneados (testado).
+- Presente de atualização para quem vem da 1.x: 1 medalha por conquista + 2 por nível do império (até 120),
+  com tela de boas-vindas; níveis já alcançados não geram enxurrada de notificações.
+- Backups: 3 automáticos em rodízio (≈ 5, 10 e 15 min) + 1 diário; se o save principal estiver danificado,
+  a recuperação tenta do mais recente ao mais antigo e o original danificado é preservado.
+- Salvamento automático a cada 10 s, ao pausar/minimizar, ao fechar e, novidade, 1,5 s após cada compra.
+- Exportar/importar com confirmação e validação, mantidos e retestados.
+- Itens exclusivos de mérito não podem ser comprados com dinheiro (o preço em dinheiro é zero).
+
+
+8. DESEMPENHO ANDROID
+---------------------
+- Medido com CPU 4× mais lenta: inicialização ~0,5–0,6 s; atualização da interface ≤ 2,8 ms por tela em
+  regime estável; memória estável em sessão longa (2 h simuladas + 2.000 toques, 2,3 → 2,6 MB, sem
+  elementos órfãos); save de ~34 KB.
+- Painel de Finanças: blocos lentos reconstruídos 1×/s (7,1 → 1,4 ms).
+- Animações apenas com transform/opacity; efeitos limitados em quantidade; "reduzir animações" respeitado.
+- 100% offline (nenhum recurso depende de internet).
+
+
+9. ARQUIVOS PRINCIPAIS ALTERADOS / NOVOS
+----------------------------------------
+- www/js/data.js (conteúdo e balanceamento), economy.js (fórmulas), game.js (regras, backups),
+  save.js (validação v3), market.js (torneios), main.js (eventos de interface), ui.js (telas), style.css.
+- Novos: www/js/meta.js (meta-progressão), www/js/ui2.js (componentes visuais), tools/perf-test.js.
+- Testes: tests/game.test.js (68 testes), tools/smoke-test.js (55 verificações), tools/upgrade-test.js,
+  tools/visual-check.js, tools/balance-sim.js.
+- Documentação: README.md, CHANGELOG.md, docs/DESIGN.md, docs/BALANCE.md, docs/ROADMAP.md.
+
+
+10. LIMITAÇÕES QUE DEPENDEM DE SERVIÇOS EXTERNOS (documentadas, não simuladas)
+------------------------------------------------------------------------------
+- Anúncios recompensados e compra "remover anúncios": exigem conta AdMob/Play Console e SDKs. O ponto de
+  integração existe (www/js/ads.js: AdService.setProvider / Store.setProvider). Sem eles, o jogo não exibe
+  anúncios, não vende nada e não simula nenhum dos dois; os bônus são gratuitos com tempo de recarga.
+- Ranking online real: exige servidor próprio com validação. Os torneios usam rivais simulados (🤖).
+- Publicação na Play Store: exige keystore própria (o APK entregue usa assinatura de debug). O README
+  explica como gerar um APK/AAB de release assinado.

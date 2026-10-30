@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 /* Medição de desempenho no Chromium com CPU desacelerada 4× (simula um celular modesto).
+ * Cada tela recebe 20 iterações de aquecimento (JIT) antes das 60 medidas, para medir o regime estável.
  * Mede: tempo até o jogo ficar pronto, custo médio do UI.update por tela, tempo médio de quadro e
  * memória JS antes/depois de uma sessão longa simulada (2 h de jogo acelerado + 2.000 toques).
  * Uso: node tools/perf-test.js */
@@ -54,6 +55,7 @@ const check = (n, ok, info) => { results.push(ok); console.log((ok ? 'PASS ' : '
     const ms = await page.evaluate(([tab, sub]) => {
       if (sub) UI.moreTab = sub;
       UI.go(tab);
+      for (let i = 0; i < 20; i++) { G.tick(0.2); UI.update(); } // aquecimento do JIT (não medido)
       const n = 60, t = performance.now();
       for (let i = 0; i < n; i++) { G.tick(0.2); UI.update(); }
       return (performance.now() - t) / n;

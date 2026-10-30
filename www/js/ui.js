@@ -47,7 +47,14 @@
   // Executa uma ação de compra com feedback (som, vibração ou tremida)
   function act(btn, fn) {
     var ok = fn();
-    if (ok) { root.Sfx.buy(); vibrate(12); UI.update(); }
+    if (ok) {
+      root.Sfx.buy(); vibrate(12);
+      var rc = btn.getBoundingClientRect();
+      UI.burstAt(rc.left + rc.width / 2, rc.top + rc.height / 2, 8);
+      btn.classList.remove('bought'); void btn.offsetWidth; btn.classList.add('bought');
+      UI.update();
+      if (root.Game && root.Game.saveSoon) root.Game.saveSoon();
+    }
     else { root.Sfx.error(); btn.classList.remove('shake'); void btn.offsetWidth; btn.classList.add('shake'); }
     return ok;
   }
@@ -57,6 +64,8 @@
   UI.h = h;
   UI.esc = esc;
   UI.bonusMode = bonusMode;
+  // utilitários compartilhados com ui2.js (componentes da v2.0)
+  UI._ = { txt: txt, html: html, cls: cls, show: show, btnLabel: btnLabel, act: act, seg: seg, vibrate: vibrate, add: add };
 
   var LOGO_SVG =
     '<svg viewBox="0 0 100 100" aria-hidden="true">' +
@@ -154,12 +163,14 @@
     hud.cash = h('div', { id: 'cash', text: '$0' });
     hud.ips = h('div', { id: 'ips', text: '+$0/s' });
     hud.boost = h('span', { class: 'chip boost hidden' });
-    hud.stars = h('span', { class: 'chip star' });
+    hud.stars = h('button', { class: 'chip star profile', 'aria-label': 'Perfil do império' });
+    hud.empBar = h('i');
     hud.boost.addEventListener('click', function () { UI.go('home'); });
-    hud.stars.addEventListener('click', function () { UI.moreTab = 'legacy'; UI.go('more'); });
+    hud.stars.addEventListener('click', function () { UI.profile(); });
     el.appendChild(h('div', { class: 'hud-top' },
       h('div', { class: 'cash-wrap' }, hud.cash, hud.ips),
       h('div', { class: 'hud-badges' }, hud.boost, hud.stars)));
+    el.appendChild(h('div', { class: 'emp-bar', title: 'Progresso do nível do império' }, hud.empBar));
     var goals = h('div', { id: 'goals' });
     hud.goals = {};
     [['short', 'CURTO'], ['mid', 'MÉDIO'], ['long', 'LONGO']].forEach(function (p) {
@@ -174,8 +185,8 @@
   var lastCash = 0;
   function updateHud() {
     var s = G.s, now = Date.now();
-    txt(hud.cash, F.money(s.cash));
-    if (s.cash > lastCash * 1.0001 + 1) { hud.cash.classList.remove('pulse'); void hud.cash.offsetWidth; hud.cash.classList.add('pulse'); }
+    // o valor exibido "rola" até o saldo real em UI.frame (contagem animada)
+    if (s.cash > lastCash * 1.0001 + 1 && !UI.reduceMotion()) { hud.cash.classList.remove('pulse'); void hud.cash.offsetWidth; hud.cash.classList.add('pulse'); }
     lastCash = s.cash;
     txt(hud.ips, '+' + F.money(E.passiveIncome(s, now), true) + '/s');
     var bt = [];
@@ -183,7 +194,10 @@
     if (s.boost.tourUntil > now) bt.push('🏆x1,5 ' + F.time((s.boost.tourUntil - now) / 1000));
     show(hud.boost, bt.length > 0);
     if (bt.length) txt(hud.boost, '⚡ ' + bt.join(' · '));
-    txt(hud.stars, '⭐ ' + s.stars);
+    var lvl = E.empireLevel(s);
+    html(hud.stars, '<span>🏛️ ' + lvl + '</span><span>⭐ ' + F.num(s.stars) + '</span><span>🎖️ ' + F.num(s.merit.bal) + '</span>');
+    var lo = lvl ? Math.pow(10, lvl * D.EMPIRE_STEP) : 0, hi = E.empireNextAt(lvl);
+    hud.empBar.style.width = Math.max(0, Math.min(100, (s.lifetimeEarned - lo) / (hi - lo) * 100)).toFixed(1) + '%';
     ['short', 'mid', 'long'].forEach(function (k) {
       var gp = G.goalProgress(k), g = hud.goals[k];
       txt(g.t, gp.def.txt);
@@ -219,14 +233,17 @@
     var bar = document.getElementById('tabbar');
     TABS.forEach(function (t) {
       var b = h('button', { 'data-tab': t.id, 'aria-label': t.label },
-        h('span', { class: 'ti', text: t.icon }), h('span', { text: t.label }), h('i', { class: 'dot' }));
+        h('span', { class: 'ti', html: UI.ICON[t.id] || t.icon }), h('span', { class: 'tl', text: t.label }), h('i', { class: 'dot' }));
       b.addEventListener('click', function () { UI.go(t.id); });
       tabBtns[t.id] = b;
       bar.appendChild(b);
     });
   }
   function shownScreen() { return G.isUnlocked(UI.tab) ? UI.tab : 'locked'; }
+  var TAB_ORDER = { home: 0, biz: 1, inv: 2, lux: 3, more: 4 };
   UI.go = function (tab) {
+    var dir = (TAB_ORDER[tab] || 0) >= (TAB_ORDER[UI.tab] || 0) ? 'fwd' : 'back';
+    if (tab !== UI.tab) document.getElementById('screens').setAttribute('data-dir', dir);
     UI.tab = tab;
     var shown = shownScreen();
     Object.keys(UI.screens).forEach(function (k) { cls(UI.screens[k].el, 'active', k === shown); });
@@ -262,17 +279,23 @@
   // MISSÕES DIÁRIAS (cartão na tela Início)
   // =====================================================================
   var daily = {};
+  var MONEY_STATS = { earned: 1, prodEarned: 1, divEarned: 1 };
   function buildDaily(parent) {
+    UI.missionTab = UI.missionTab || 'daily';
     daily.timer = h('div', { class: 'muted' });
+    daily.seg = seg([['daily', '📅 Diárias'], ['weekly', '📆 Semanais']], function () { return UI.missionTab; }, function (v) { UI.missionTab = v; });
+    daily.seg.classList.add('seg-mini');
     daily.rows = [0, 1, 2].map(function (i) {
       var x = { ico: h('div', { class: 'mico' }), txt: h('div', { class: 'mtxt' }), bar: h('i'), sub: h('div', { class: 'muted' }), btn: h('button', { class: 'btn mbtn' }) };
       x.btn.addEventListener('click', function () {
-        var a = G.claimDaily(i);
-        if (!a) { act(x.btn, function () { return false; }); return; }
+        var weekly = UI.missionTab === 'weekly';
+        var res = weekly ? G.claimWeekly(i) : G.claimDaily(i);
+        if (!res) { act(x.btn, function () { return false; }); return; }
         root.Sfx.big(); vibrate(15);
         var rc = x.btn.getBoundingClientRect();
-        UI.coins(rc.left + rc.width / 2, rc.top, 10);
-        UI.toast('📅 Missão concluída: <b>+' + F.money(a) + '</b>', 'good');
+        UI.burstAt(rc.left + rc.width / 2, rc.top + rc.height / 2, 14);
+        UI.toast(weekly ? '📆 Desafio concluído: <b>+' + F.money(res.cash) + '</b> e <b>+' + res.medals + ' 🎖️</b>'
+                        : '📅 Missão concluída: <b>+' + F.money(res) + '</b>', 'good');
         root.Game.save(); UI.update();
       });
       x.el = h('div', { class: 'mission' }, x.ico, h('div', { class: 'grow' }, x.txt, h('div', { class: 'bar' }, x.bar), x.sub), x.btn);
@@ -280,39 +303,53 @@
     });
     daily.bonus = h('button', { class: 'btn wide pink', id: 'dailyBonus' });
     daily.bonus.addEventListener('click', function () {
-      var a = G.claimDailyBonus();
+      var weekly = UI.missionTab === 'weekly';
+      var a = weekly ? G.claimWeeklyBonus() : G.claimDailyBonus();
       if (!a) { act(daily.bonus, function () { return false; }); return; }
       root.Sfx.big(); vibrate(30);
       var rc = daily.bonus.getBoundingClientRect();
-      UI.coins(rc.left + rc.width / 2, rc.top, 18);
-      UI.toast('🎁 Baú diário: <b>+' + F.money(a) + '</b> · sequência de ' + G.s.daily.streak + ' dia(s)!', 'good', null, 4500);
+      UI.burstAt(rc.left + rc.width / 2, rc.top + rc.height / 2, 24, true);
+      UI.toast(weekly ? '🏅 Semana perfeita: <b>+' + a + ' 🎖️</b>' : '🎁 Baú diário: <b>+' + F.money(a) + '</b> · sequência de ' + G.s.daily.streak + ' dia(s)!', 'good', null, 4500);
       root.Game.save(); UI.update();
     });
+    daily.title = h('div', { class: 'title grow' });
     daily.card = h('div', { class: 'card daily', id: 'dailyCard' },
-      h('div', { class: 'row' }, h('div', { class: 'title grow', text: '📅 Missões do dia' }), daily.timer),
+      daily.seg, h('div', { class: 'row' }, daily.title, daily.timer),
       daily.rows.map(function (x) { return x.el; }), daily.bonus);
     parent.appendChild(daily.card);
   }
   UI.updateDaily = function () {
-    var dl = G.s.daily;
-    show(daily.card, !!dl && dl.list.length > 0);
+    var s = G.s, weekly = UI.missionTab === 'weekly';
+    var dl = weekly ? s.weekly : s.daily;
+    daily.seg.refresh();
+    show(daily.card, !!(s.daily && s.daily.list.length));
     if (!dl) return;
-    var d = new Date(), midnight = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime();
-    txt(daily.timer, 'renova em ' + F.time((midnight - Date.now()) / 1000));
+    var now = Date.now(), d = new Date();
+    var ends = weekly ? M.weekEnd(dl.week) : new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime();
+    txt(daily.title, weekly ? 'Desafios da semana' : 'Missões do dia');
+    txt(daily.timer, 'renova em ' + F.time((ends - now) / 1000));
     daily.rows.forEach(function (x, i) {
       var m = dl.list[i];
       show(x.el, !!m);
       if (!m) return;
-      var p = G.dailyProgress(m), isMoney = p.def.stat === 'earned';
+      var p = weekly ? G.weeklyProgress(m) : G.dailyProgress(m), isMoney = MONEY_STATS[p.def.stat];
       txt(x.ico, p.def.icon);
-      txt(x.txt, G.dailyText(m));
+      txt(x.txt, weekly ? G.weeklyText(m) : G.dailyText(m));
       x.bar.style.width = (m.claimed ? 100 : p.frac * 100).toFixed(1) + '%';
-      txt(x.sub, m.claimed ? 'Resgatado: +' + F.money(m.reward) : (isMoney ? F.money(p.cur) + ' / ' + F.money(p.target) : F.num(p.cur) + ' / ' + F.num(p.target)) + ' · prêmio ' + F.money(G.dailyReward(m)));
+      var prize = weekly ? F.money(G.weeklyReward(m).cash) + ' + ' + p.def.medals + ' 🎖️' : F.money(G.dailyReward(m));
+      txt(x.sub, m.claimed ? 'Resgatado: +' + F.money(m.reward) + (weekly ? ' + ' + p.def.medals + ' 🎖️' : '')
+        : (isMoney ? F.money(p.cur) + ' / ' + F.money(p.target) : F.num(p.cur) + ' / ' + F.num(p.target)) + ' · prêmio ' + prize);
       cls(x.el, 'claimed', m.claimed);
       if (m.claimed) { btnLabel(x.btn, '✓'); cls(x.btn, 'done', true); cls(x.btn, 'off', false); cls(x.btn, 'ready', false); }
       else if (p.done) { btnLabel(x.btn, 'Resgatar'); cls(x.btn, 'done', false); cls(x.btn, 'off', false); cls(x.btn, 'ready', true); }
       else { btnLabel(x.btn, Math.floor(p.frac * 100) + '%'); cls(x.btn, 'done', false); cls(x.btn, 'off', true); cls(x.btn, 'ready', false); }
     });
+    if (weekly) {
+      if (dl.bonus) { btnLabel(daily.bonus, '✓ Semana perfeita concluída', 'novos desafios na segunda-feira'); cls(daily.bonus, 'done', true); cls(daily.bonus, 'off', false); }
+      else if (G.weeklyBonusReady()) { btnLabel(daily.bonus, '🏅 Semana perfeita', '+' + D.WEEKLY_BONUS_MEDALS + ' 🎖️ Medalhas de Mérito'); cls(daily.bonus, 'done', false); cls(daily.bonus, 'off', false); }
+      else { btnLabel(daily.bonus, '🏅 Semana perfeita', 'conclua os 3 desafios: +' + D.WEEKLY_BONUS_MEDALS + ' 🎖️'); cls(daily.bonus, 'done', false); cls(daily.bonus, 'off', true); }
+      return;
+    }
     if (dl.bonus) { btnLabel(daily.bonus, '✓ Baú aberto — volte amanhã', 'sequência: ' + dl.streak + ' dia(s)'); cls(daily.bonus, 'done', true); cls(daily.bonus, 'off', false); }
     else if (G.dailyBonusReady()) { btnLabel(daily.bonus, '🎁 Abrir baú diário', '+' + F.money(G.dailyBonusAmount())); cls(daily.bonus, 'done', false); cls(daily.bonus, 'off', false); }
     else { btnLabel(daily.bonus, '🎁 Baú diário', 'conclua e resgate as 3 missões'); cls(daily.bonus, 'done', false); cls(daily.bonus, 'off', true); }
@@ -350,6 +387,9 @@
   // =====================================================================
   function buildHome() {
     var sc = screen('home'), el = sc.el, r = {};
+    r.sector = h('button', { class: 'sector-banner' });
+    r.sector.addEventListener('click', function () { UI.go('biz'); });
+    el.appendChild(r.sector);
     r.tap = h('button', { id: 'tapBtn', 'aria-label': 'Toque para ganhar dinheiro', html: LOGO_SVG });
     r.tapVal = h('div', { class: 'tap-val' });
     r.tap.addEventListener('pointerdown', function (e) {
@@ -425,6 +465,8 @@
     sc.update = function () {
       var s = G.s, now = Date.now();
       txt(r.tapVal, '+' + F.money(E.tapValue(s, now), true) + ' por toque');
+      var sev = E.sectorEventAt(now);
+      html(r.sector, '<span class="sb-ico">' + sev.ev.icon + '</span><span class="grow"><b>' + esc(sev.ev.name) + '</b><br><small>+' + Math.round((sev.ev.mult - 1) * 100) + '% em ' + esc(sev.ev.cats.join(' e ')) + ' · ' + F.time((sev.ends - now) / 1000) + '</small></span><span class="sb-go">›</span>');
       var mode = bonusMode(), ic = MODE_ICON[mode], active = s.boost.adUntil > now;
       if (mode === 'free') {
         var ready = G.freeBoostReady();
@@ -470,36 +512,52 @@
   // =====================================================================
   var bizCards = {};
   function buildBiz() {
-    var sc = screen('biz'), el = sc.el;
+    var sc = screen('biz'), el = sc.el, r = {};
+    // resumo do conglomerado
+    r.sumIncome = h('div', { class: 'sum-v' }); r.sumOwned = h('div', { class: 'sum-v' }); r.sumUpg = h('div', { class: 'sum-v' });
+    r.event = h('div', { class: 'sector-pill' });
+    el.appendChild(h('div', { class: 'card biz-summary' },
+      h('div', { class: 'sum-grid' },
+        h('div', null, h('div', { class: 'sum-k', text: 'Renda das empresas' }), r.sumIncome),
+        h('div', null, h('div', { class: 'sum-k', text: 'Empresas' }), r.sumOwned),
+        h('div', null, h('div', { class: 'sum-k', text: 'Melhorias' }), r.sumUpg)),
+      r.event));
     el.appendChild(seg([[1, 'x1'], [10, 'x10'], [100, 'x100'], ['max', 'MÁX']],
       function () { return UI.bizMode; }, function (v) { UI.bizMode = v; }));
     var teaser = h('div', { class: 'teaser' });
     D.BUSINESSES.forEach(function (b) {
       var c = {};
       c.lv = h('span', { class: 'lv' });
-      c.ico = h('div', { class: 'ico', style: 'background:' + b.color + '33' }, b.icon, c.lv);
+      c.ico = h('button', { class: 'ico biz-ico', style: 'background:linear-gradient(145deg,' + b.color + '55,' + b.color + '1a)', 'aria-label': 'Produzir em ' + b.name }, b.icon, c.lv);
       c.name = h('div', { class: 'title', text: b.name });
+      c.tags = h('div', { class: 'biz-tags' });
       c.sub = h('div', { class: 'muted' });
+      c.info = h('button', { class: 'info-btn', 'aria-label': 'Detalhes de ' + b.name, html: UI.ICON.info });
+      c.msbar = h('i');
       c.fill = h('i'); c.ptxt = h('span');
       c.pbar = h('div', { class: 'pbar' }, c.fill, c.ptxt);
       c.buy = h('button', { class: 'btn' });
       c.mgr = h('button', { class: 'btn alt' });
       c.emp = h('button', { class: 'btn ghost' });
+      c.upg = h('button', { class: 'upg-pill hidden' });
       c.evt = h('div', { class: 'evt hidden' });
-      c.el = h('div', { class: 'card biz', id: 'biz-' + b.id },
-        h('div', { class: 'row' }, c.ico, h('div', { class: 'grow' }, c.name, c.sub)),
+      c.el = h('div', { class: 'card biz', id: 'biz-' + b.id, style: '--biz:' + b.color },
+        h('div', { class: 'row' }, c.ico, h('div', { class: 'grow' }, c.name, c.tags, c.sub, h('div', { class: 'ms-bar' }, c.msbar)), c.info),
         c.pbar,
         h('div', { class: 'biz-actions' }, c.buy, c.mgr, c.emp),
-        c.evt);
+        c.upg, c.evt);
       c.ico.addEventListener('click', function () {
-        if (G.runBiz(b.id)) { root.Sfx.coin(); vibrate(8); }
+        if (G.runBiz(b.id)) { root.Sfx.coin(); vibrate(8); c.ico.classList.remove('tapped'); void c.ico.offsetWidth; c.ico.classList.add('tapped'); }
         else if (G.s.biz[b.id].lvl === 0) UI.toast('Compre o negócio primeiro!', 'info');
+        else if (G.s.biz[b.id].mgr) UI.toast('👔 ' + esc(b.mgrName) + ' já produz automaticamente.', 'info');
       });
+      c.info.addEventListener('click', function () { UI.bizDetail(b.id); });
+      c.upg.addEventListener('click', function () { UI.bizDetail(b.id); });
       c.buy.addEventListener('click', function () {
         act(c.buy, function () { return G.buyBiz(b.id, UI.bizMode === 'max' ? 'max' : UI.bizMode); });
       });
       c.mgr.addEventListener('click', function () {
-        if (G.s.biz[b.id].mgr) { UI.toast('👔 ' + b.mgrName + ' cuida de tudo — produção automática, inclusive offline.', 'info'); return; }
+        if (G.s.biz[b.id].mgr) { UI.toast('👔 ' + esc(b.mgrName) + ' cuida de tudo — produção automática, inclusive offline.', 'info'); return; }
         act(c.mgr, function () { return G.hireManager(b.id); });
       });
       c.emp.addEventListener('click', function () { act(c.emp, function () { return G.hireEmployee(b.id); }); });
@@ -509,9 +567,12 @@
     el.appendChild(teaser);
 
     sc.update = function () {
-      var s = G.s, now = Date.now(), firstLocked = -1;
+      var s = G.s, now = Date.now(), firstLocked = -1, bizInc = 0;
+      var sev = E.sectorEventAt(now);
+      html(r.event, sev.ev.icon + ' <b>' + esc(sev.ev.name) + '</b>: +' + Math.round((sev.ev.mult - 1) * 100) + '% em ' + esc(sev.ev.cats.join(' e ')) + ' · termina em ' + F.time((sev.ends - now) / 1000));
       D.BUSINESSES.forEach(function (b, i) {
         var st = s.biz[b.id], c = bizCards[b.id], locked = st.lvl === 0;
+        if (st.mgr) bizInc += E.bizIncome(s, b.id, now) - E.bizUpkeep(s, b.id);
         if (locked && firstLocked < 0) firstLocked = i;
         var visible = !locked || firstLocked === i || (firstLocked >= 0 && i === firstLocked + 1);
         show(c.el, visible);
@@ -522,16 +583,25 @@
         var cost = E.bizCost(s, b.id, k);
         btnLabel(c.buy, locked ? 'Abrir negócio' : 'Comprar x' + k, F.money(cost));
         cls(c.buy, 'off', s.cash < cost);
+        var hot = E.sectorMult(b.id, now) > 1, eff = E.effLevel(s, b.id);
+        html(c.tags, '<span class="tag" style="--c:' + b.color + '">' + esc(b.cat) + '</span>' +
+          (hot ? '<span class="tag hot">🔥 +' + Math.round((sev.ev.mult - 1) * 100) + '%</span>' : '') +
+          (eff ? '<span class="tag eff">⚙️ Efic. ' + eff + '</span>' : '') +
+          (st.up ? '<span class="tag upg">⬆️ ' + st.up + '/' + D.BIZ_UPGRADES.length + '</span>' : ''));
         if (locked) {
-          txt(c.sub, b.cat + ' · rende ' + F.money(b.rev / b.t, true) + '/s por nível');
-          show(c.mgr, false); show(c.emp, false);
-          txt(c.ptxt, 'Gerente: ' + b.mgrName);
+          txt(c.sub, 'Rende ' + F.money(b.rev / b.t, true) + '/s por nível · gerente: ' + b.mgrName);
+          show(c.mgr, false); show(c.emp, false); show(c.upg, false);
+          txt(c.ptxt, 'Abra para começar a produzir');
+          c.msbar.style.width = '0%';
         } else {
-          var nm = E.nextMilestone(st.lvl);
-          txt(c.sub, b.cat + ' · ' + (nm ? 'x2 receita no Nv ' + nm : 'todos os marcos!') + (st.emp ? ' · 👥 +' + st.emp * 50 + '%' : ''));
+          var nm = E.nextMilestone(st.lvl), prevM = 0;
+          D.MILESTONES.forEach(function (m) { if (m <= st.lvl) prevM = m; });
+          txt(c.sub, (nm ? 'x2 receita no Nv ' + nm : 'Todos os marcos alcançados!') + (st.emp ? ' · 👥 +' + st.emp * 50 + '%' : ''));
+          c.msbar.style.width = (nm ? (st.lvl - prevM) / (nm - prevM) * 100 : 100).toFixed(1) + '%';
           show(c.mgr, true); show(c.emp, true);
+          var mc = E.mgrCost(s, b.id);
           if (st.mgr) { btnLabel(c.mgr, '👔 Gerente', 'automático'); cls(c.mgr, 'done', true); cls(c.mgr, 'off', false); }
-          else { btnLabel(c.mgr, '👔 Gerente', F.money(b.mgr)); cls(c.mgr, 'done', false); cls(c.mgr, 'off', s.cash < b.mgr); }
+          else { btnLabel(c.mgr, '👔 Gerente', F.money(mc)); cls(c.mgr, 'done', false); cls(c.mgr, 'off', s.cash < mc); }
           if (st.emp >= D.EMP_MAX) { btnLabel(c.emp, '👥 Equipe', 'completa'); cls(c.emp, 'off', false); }
           else { var ec = E.empCost(s, b.id); btnLabel(c.emp, '👥 ' + st.emp + '/' + D.EMP_MAX, F.money(ec)); cls(c.emp, 'off', s.cash < ec); }
           var producing = st.mgr || st.running;
@@ -539,6 +609,14 @@
           txt(c.ptxt, producing || st.mgr ? F.money(rev, true) + ' a cada ' + (T < 10 ? T.toFixed(1).replace('.', ',') + 's' : F.time(T))
             : '▶ Toque no ícone para produzir ' + F.money(rev, true));
           cls(c.ico, 'idle', !producing);
+          // próxima melhoria
+          var ui = G.upgradeInfo(b.id);
+          var showUpg = ui && !ui.done && (ui.locked ? st.lvl >= ui.req * 0.6 : true);
+          show(c.upg, !!showUpg);
+          if (showUpg) {
+            html(c.upg, ui.def.icon + ' ' + esc(ui.def.name) + ' · ' + (ui.locked ? 'no Nv ' + ui.req : F.money(ui.cost)) + ' <span>›</span>');
+            cls(c.upg, 'ready', !ui.locked && s.cash >= ui.cost);
+          }
         }
         // evento ativo
         var ev = s.events.filter(function (e) { return e.biz === b.id && e.until > now; })[0];
@@ -562,12 +640,15 @@
           txt(c.evtTime, F.time((ev.until - now) / 1000));
         } else c.evtKey = null;
       });
+      txt(r.sumIncome, F.money(bizInc, true) + '/s');
+      txt(r.sumOwned, E.ownedCount(s) + '/' + D.BUSINESSES.length);
+      txt(r.sumUpg, E.upgCount(s) + '/' + D.BUSINESSES.length * D.BIZ_UPGRADES.length);
       var hidden = D.BUSINESSES.length - D.BUSINESSES.filter(function (b) { return !bizCards[b.id].el.classList.contains('hidden'); }).length;
       show(teaser, hidden > 0);
       if (hidden > 0) txt(teaser, '🔒 +' + hidden + ' negócios a descobrir em Cifrópolis...');
     };
 
-    // barras de progresso suaves (todo frame)
+    // barras de progresso suaves (todo frame, só na tela de negócios)
     sc.frame = function () {
       var s = G.s;
       D.BUSINESSES.forEach(function (b) {
@@ -579,6 +660,7 @@
       });
     };
   }
+  UI.bizCard = function (id) { return bizCards[id]; };
   var lastPayFx = {};
   UI.bizPay = function (p) {
     if (UI.tab !== 'biz') return;
@@ -601,6 +683,10 @@
     r.seg = seg([['stock', '📈 Ações'], ['crypto', '🪙 Cripto'], ['prop', '🏠 Imóveis']],
       function () { return UI.invTab; }, function (v) { UI.invTab = v; drawChart(true); });
     el.appendChild(r.seg);
+
+    // resumo da carteira
+    r.pf = h('div', { class: 'card portfolio' });
+    el.appendChild(r.pf);
 
     r.tour = h('div', { class: 'card tour-banner' });
     r.tour.addEventListener('click', function () { UI.moreTab = 'tour'; UI.go('more'); });
@@ -645,8 +731,9 @@
     r.rows = {};
     M.ASSETS.forEach(function (a) {
       var x = { price: h('div', { class: 'price' }), chg: h('div', { class: 'small', style: 'text-align:right' }), own: h('div', { class: 'muted' }) };
+      var divTag = a.div ? h('span', { class: 'tag div', text: '💹 ' + (a.div * 100).toFixed(1).replace('.', ',') + '%/h' }) : null;
       x.el = h('div', { class: 'asset-row' }, h('div', { class: 'ico', text: a.icon }),
-        h('div', { class: 'grow' }, h('div', { class: 'title', text: a.name + ' ' }), x.own), h('div', null, x.price, x.chg));
+        h('div', { class: 'grow' }, h('div', { class: 'title', text: a.name + ' ' }), h('div', { class: 'row-sub' }, x.own, divTag)), h('div', null, x.price, x.chg));
       x.el.addEventListener('click', function () { UI.sel[a.type] = a.id; drawChart(true); UI.update(); });
       r.rows[a.id] = x;
       r.listCard.appendChild(x.el);
@@ -659,14 +746,18 @@
 
     // imóveis
     r.props = h('div');
+    r.propSum = h('div', { class: 'card portfolio' });
+    r.props.appendChild(r.propSum);
     r.propRows = D.PROPS.map(function (p) {
-      var x = { name: h('div', { class: 'title' }), sub: h('div', { class: 'muted' }), btn: h('button', { class: 'btn' }) };
+      var x = { name: h('div', { class: 'title' }), sub: h('div', { class: 'muted' }), btn: h('button', { class: 'btn' }), reno: h('button', { class: 'upg-pill hidden' }) };
       x.btn.addEventListener('click', function () { act(x.btn, function () { return G.buyProp(p.id); }); });
-      r.props.appendChild(h('div', { class: 'card' }, h('div', { class: 'row' },
-        h('div', { class: 'ico', text: p.icon }), h('div', { class: 'grow' }, x.name, x.sub), x.btn)));
+      x.reno.addEventListener('click', function () { act(x.reno, function () { return G.renovate(p.id); }); });
+      x.card = h('div', { class: 'card', id: 'prop-' + p.id }, h('div', { class: 'row' },
+        h('div', { class: 'ico', text: p.icon }), h('div', { class: 'grow' }, x.name, x.sub), x.btn), x.reno);
+      r.props.appendChild(x.card);
       return x;
     });
-    r.props.appendChild(h('div', { class: 'muted', style: 'text-align:center;padding:6px', text: 'Aluguéis caem na conta o tempo todo — inclusive offline. Manutenção: 10% do aluguel.' }));
+    r.props.appendChild(h('div', { class: 'muted', style: 'text-align:center;padding:6px', text: 'Aluguéis caem na conta o tempo todo — inclusive offline. Manutenção: 10% do aluguel. Cada reforma: +20% de aluguel naquele tipo de imóvel.' }));
     el.appendChild(r.props);
 
     var lastDraw = '';
@@ -706,7 +797,16 @@
         ctx.beginPath(); ctx.moveTo(0, Y(hold.avg)); ctx.lineTo(w, Y(hold.avg)); ctx.stroke(); ctx.setLineDash([]);
         ctx.fillStyle = '#ffc93c'; ctx.font = 'bold 10px sans-serif'; ctx.fillText('seu preço médio', 6, Y(hold.avg) - 4);
       }
-      ctx.beginPath(); ctx.arc(X(pts.length - 1), Y(pts[pts.length - 1]), 3.5, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
+      var lastY = Y(pts[pts.length - 1]);
+      ctx.beginPath(); ctx.arc(X(pts.length - 1), lastY, 6, 0, Math.PI * 2); ctx.fillStyle = up ? 'rgba(46,230,168,0.25)' : 'rgba(255,93,108,0.25)'; ctx.fill();
+      ctx.beginPath(); ctx.arc(X(pts.length - 1), lastY, 3.5, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
+      // escala de preço (máx/mín) e marcador de tempo
+      ctx.font = '600 10px system-ui, sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.textAlign = 'right';
+      ctx.fillText(F.money(max - pad, true), w - 6, 12);
+      ctx.fillText(F.money(min + pad, true), w - 6, hgt - 4);
+      ctx.textAlign = 'left';
+      ctx.fillText('6 min', 6, 12);
+      ctx.textAlign = 'start';
     }
 
     sc.onShow = function () { drawChart(true); };
@@ -715,18 +815,43 @@
       r.seg.refresh();
       // torneio
       var rk = M.ranking(s, now).findIndex(function (x) { return x.me; }) + 1;
-      html(r.tourTxt, '<b>Torneio semanal da bolsa</b> <span class="sim-tag">rivais simulados</span><br>Você está em <b>#' + rk + '</b> · lucro ' + F.money(s.tour.score) +
-        ' · termina em ' + F.time((M.weekEnd(s.tour.week) - now) / 1000));
+      var rk2 = M.raceRanking(s, now).findIndex(function (x) { return x.me; }) + 1;
+      html(r.tourTxt, '<b>Torneios semanais</b> <span class="sim-tag">rivais simulados 🤖</span><br>📈 Bolsa: <b>#' + rk + '</b> · 🏁 Corrida: <b>#' + rk2 + '</b> · termina em ' + F.time((M.weekEnd(s.tour.week) - now) / 1000));
       show(r.market, type !== 'prop');
       show(r.props, type === 'prop');
+      show(r.pf, type !== 'prop');
+      if (type !== 'prop') {
+        var pv = E.portfolioValue(s), cost = 0;
+        for (var hid in s.hold) cost += s.hold[hid].qty * s.hold[hid].avg;
+        var plAll = pv * (1 - D.TRADE_FEE) - cost, divH = E.dividendRate(s) * 3600;
+        html(r.pf, '<div class="sum-grid"><div><div class="sum-k">Carteira</div><div class="sum-v">' + F.money(pv) + '</div></div>' +
+          '<div><div class="sum-k">Lucro/prejuízo</div><div class="sum-v ' + (plAll >= 0 ? 'pos' : 'neg') + '">' + (pv ? (plAll >= 0 ? '+' : '') + F.money(plAll) : '—') + '</div></div>' +
+          '<div><div class="sum-k">Dividendos</div><div class="sum-v">' + F.money(divH) + '/h</div></div></div>' +
+          '<div class="muted small" style="margin-top:6px">Total recebido em dividendos: ' + F.money(s.stats.divEarned) + ' · lucro realizado: ' + F.money(s.stats.tradeProfit) + '</div>');
+      }
       if (type === 'prop') {
+        var totalUnits = 0;
         D.PROPS.forEach(function (p, i) {
-          var x = r.propRows[i], n = s.props[p.id] || 0, c = E.propCost(s, p.id);
+          var x = r.propRows[i], n = s.props[p.id] || 0, c = E.propCost(s, p.id), rent = E.propRent(s, p.id), rl = E.renoLvl(s, p.id);
+          totalUnits += n;
           txt(x.name, p.name + (n ? ' ×' + n : ''));
-          txt(x.sub, 'Aluguel ' + F.money(p.rent * (1 + E.luxBonus(s, 'rent')) * E.starMult(s), true) + '/s cada' + (n ? ' · total ' + F.money(n * p.rent * (1 + E.luxBonus(s, 'rent')) * E.starMult(s), true) + '/s' : ''));
+          txt(x.sub, 'Aluguel ' + F.money(rent, true) + '/s cada' + (n ? ' · total ' + F.money(n * rent, true) + '/s' : '') + (rl ? ' · 🔨 Nv ' + rl : ''));
           btnLabel(x.btn, 'Comprar', F.money(c));
           cls(x.btn, 'off', s.cash < c);
+          show(x.reno, n > 0);
+          if (n > 0) {
+            if (rl >= D.RENO_MAX) { html(x.reno, '🔨 Reformas completas (+' + D.RENO_MAX * 20 + '% de aluguel)'); cls(x.reno, 'ready', false); cls(x.reno, 'done', true); }
+            else {
+              var rc = E.renoCost(s, p.id);
+              html(x.reno, '🔨 Reformar (Nv ' + rl + '→' + (rl + 1) + ', +20% aluguel) · ' + F.money(rc) + ' <span>›</span>');
+              cls(x.reno, 'ready', s.cash >= rc); cls(x.reno, 'done', false);
+            }
+          }
         });
+        var rentNet = E.rentGross(s) - E.rentUpkeep(s);
+        html(r.propSum, '<div class="sum-grid"><div><div class="sum-k">Aluguel líquido</div><div class="sum-v">' + F.money(rentNet, true) + '/s</div></div>' +
+          '<div><div class="sum-k">Imóveis</div><div class="sum-v">' + F.num(totalUnits) + '</div></div>' +
+          '<div><div class="sum-k">Reformas</div><div class="sum-v">' + D.PROPS.reduce(function (a, p) { return a + E.renoLvl(s, p.id); }, 0) + '/' + D.PROPS.length * D.RENO_MAX + '</div></div></div>');
         return;
       }
       M.ASSETS.forEach(function (a) {
@@ -749,7 +874,8 @@
         '<span>Em carteira</span><b>' + F.num(hold.qty) + '</b>' +
         '<span>Preço médio</span><b>' + (hold.qty ? F.money(hold.avg, true) : '—') + '</b>' +
         '<span>Valor atual</span><b>' + F.money(val, true) + '</b>' +
-        '<span>Lucro/prejuízo (se vender)</span><b class="' + (pl >= 0 ? 'pos' : 'neg') + '">' + (hold.qty ? (pl >= 0 ? '+' : '') + F.money(pl, true) : '—') + '</b>');
+        '<span>Lucro/prejuízo (se vender)</span><b class="' + (pl >= 0 ? 'pos' : 'neg') + '">' + (hold.qty ? (pl >= 0 ? '+' : '') + F.money(pl, true) : '—') + '</b>' +
+        (a.div ? '<span>Dividendos (' + (a.div * 100).toFixed(1).replace('.', ',') + '% do preço por hora)</span><b>' + (hold.qty ? '+' + F.money(hold.qty * m.p * a.div, true) + '/h' : '—') + '</b>' : '<span>Dividendos</span><b>não paga (cripto)</b>'));
       r.qtyBtns.forEach(function (q) { cls(q.b, 'on', UI.qty === q.v); });
       var bq = UI.qty === 'max' ? G.maxBuyAsset(id) : UI.qty;
       var sq = UI.qty === 'max' ? hold.qty : Math.min(UI.qty, hold.qty);
@@ -768,29 +894,67 @@
   // LUXO & COLEÇÃO
   // =====================================================================
   function buildLux() {
-    var sc = screen('lux'), el = sc.el, r = { items: {}, heads: {} };
+    var sc = screen('lux'), el = sc.el, r = { items: {}, heads: {}, merit: {} };
+    UI.luxTab = UI.luxTab || 'col';
+    r.seg = seg([['col', '💎 Coleção'], ['merit', '🎖️ Loja de Mérito']], function () { return UI.luxTab; }, function (v) { UI.luxTab = v; });
+    el.appendChild(r.seg);
+    // ---- coleção ----
+    r.col = h('div');
     r.hero = h('div', { class: 'card stat-hero' });
-    el.appendChild(r.hero);
+    r.col.appendChild(r.hero);
     D.LUX_CATS.forEach(function (cat) {
       r.heads[cat.id] = h('h2');
-      el.appendChild(r.heads[cat.id]);
+      r.col.appendChild(r.heads[cat.id]);
       var grid = h('div', { class: 'lux-grid' });
       D.LUXURY.filter(function (l) { return l.cat === cat.id; }).forEach(function (l) {
-        var x = { btn: h('button', { class: 'btn' }) };
-        x.el = h('div', { class: 'card lux', id: 'lux-' + l.id },
+        var x = { btn: h('button', { class: 'btn' + (l.merit ? ' merit' : '') }) };
+        x.el = h('div', { class: 'card lux' + (l.merit ? ' exclusive' : ''), id: 'lux-' + l.id },
           h('div', { class: 'big', text: l.icon }), h('div', { class: 'nm', text: l.name }),
           h('div', { class: 'muted', text: bonusText(l) }), x.btn);
-        x.btn.addEventListener('click', function () { act(x.btn, function () { return G.buyLux(l.id); }); });
+        x.btn.addEventListener('click', function () {
+          act(x.btn, function () { return l.merit ? G.buyMeritLux(l.id) : G.buyLux(l.id); });
+        });
         r.items[l.id] = x;
         grid.appendChild(x.el);
       });
-      el.appendChild(grid);
+      r.col.appendChild(grid);
     });
-    el.appendChild(h('div', { class: 'muted', style: 'text-align:center;padding:8px', text: 'Itens de luxo são permanentes: continuam com você mesmo após o Legado (prestígio). Complete uma categoria para +5% de renda global.' }));
+    r.col.appendChild(h('div', { class: 'muted', style: 'text-align:center;padding:8px', text: 'Itens de luxo são permanentes: continuam com você mesmo após o Legado. Complete uma categoria para +5% de renda global. Os Exclusivos de Mérito não são vendidos por dinheiro.' }));
+    el.appendChild(r.col);
+    // ---- Loja de Mérito ----
+    r.mer = h('div');
+    r.merHero = h('div', { class: 'card stat-hero merit-hero' });
+    r.mer.appendChild(r.merHero);
+    D.MERIT_SHOP.forEach(function (m) {
+      var x = { name: h('div', { class: 'title' }), sub: h('div', { class: 'muted', text: m.desc }), pips: h('div', { class: 'pips' }), btn: h('button', { class: 'btn merit', id: 'merit-' + m.id }) };
+      x.btn.addEventListener('click', function () { act(x.btn, function () { return G.buyMerit(m.id); }); });
+      r.mer.appendChild(h('div', { class: 'card' }, h('div', { class: 'row' }, h('div', { class: 'ico', text: m.icon }), h('div', { class: 'grow' }, x.name, x.sub, x.pips), x.btn)));
+      r.merit[m.id] = x;
+    });
+    r.mer.appendChild(h('div', { class: 'card small', html:
+      '<b>Como ganhar Medalhas de Mérito 🎖️</b><br>• Subir de nível do império (+2, +5 a cada 5 níveis)<br>• Desafios semanais e "semana perfeita"<br>' +
+      '• Torneios semanais (2 a 25 por torneio)<br>• Cada conquista (+1) e cada Legado (5 ou mais)<br>' +
+      '<span class="muted">Medalhas não são vendidas por dinheiro real e as melhorias da loja continuam após o Legado.</span>' }));
+    el.appendChild(r.mer);
+
     sc.update = function () {
       var s = G.s, col = E.completedCollections(s);
-      html(r.hero, '<div class="muted">Status social</div><div class="v">✨ ' + E.status(s) + ' · ' + E.statusTitle(s) + '</div>' +
-        '<div class="muted">Coleções completas: <b>' + col + '/' + D.LUX_CATS.length + '</b> · Bônus de renda: <b class="pos">+' +
+      r.seg.refresh();
+      show(r.col, UI.luxTab === 'col'); show(r.mer, UI.luxTab === 'merit');
+      if (UI.luxTab === 'merit') {
+        html(r.merHero, '<div class="muted">Medalhas de Mérito</div><div class="v">🎖️ ' + F.num(s.merit.bal) + '</div>' +
+          '<div class="muted">Ganhas no total: ' + F.num(s.merit.earned) + ' · gastas: ' + F.num(s.merit.spent) + '</div>');
+        D.MERIT_SHOP.forEach(function (m) {
+          var x = r.merit[m.id], lv = E.meritLvl(s, m.id);
+          txt(x.name, m.name + ' · Nv ' + lv + '/' + m.max);
+          html(x.pips, Array.from({ length: m.max }, function (_, i) { return '<i class="' + (i < lv ? 'on' : '') + '"></i>'; }).join(''));
+          if (lv >= m.max) { btnLabel(x.btn, 'MÁX'); cls(x.btn, 'done', true); cls(x.btn, 'off', false); }
+          else { var c = G.meritCost(m.id); btnLabel(x.btn, 'Comprar', '🎖️ ' + c); cls(x.btn, 'done', false); cls(x.btn, 'off', s.merit.bal < c); }
+        });
+        return;
+      }
+      html(r.hero, '<div class="muted">Status social</div><div class="v">✨ ' + F.num(E.status(s)) + ' · ' + E.statusTitle(s) + '</div>' +
+        '<div class="muted">Coleções completas: <b>' + col + '/' + D.LUX_CATS.length + '</b> · Itens: <b>' + Object.keys(s.lux).length + '/' + D.LUXURY.length + '</b> · Bônus de renda: <b class="pos">+' +
         Math.round((E.luxBonus(s, 'inc') + col * D.COLLECTION_BONUS) * 100) + '%</b></div>');
       D.LUX_CATS.forEach(function (cat) {
         var items = D.LUXURY.filter(function (l) { return l.cat === cat.id; });
@@ -801,6 +965,7 @@
         var x = r.items[l.id], own = !!s.lux[l.id];
         cls(x.el, 'own', own);
         if (own) { btnLabel(x.btn, 'Na coleção ✓'); cls(x.btn, 'done', true); cls(x.btn, 'off', false); }
+        else if (l.merit) { btnLabel(x.btn, 'Resgatar', '🎖️ ' + l.merit); cls(x.btn, 'done', false); cls(x.btn, 'off', s.merit.bal < l.merit); }
         else { btnLabel(x.btn, 'Comprar', F.money(l.cost)); cls(x.btn, 'done', false); cls(x.btn, 'off', s.cash < l.cost); }
       });
     };
@@ -820,8 +985,8 @@
   // =====================================================================
   function buildMore() {
     var sc = screen('more'), el = sc.el, r = {};
-    r.seg = seg([['fin', '💰\nFinanças'], ['ach', '🏅\nConquistas'], ['tour', '🏆\nTorneio'], ['legacy', '🌅\nLegado'], ['set', '⚙️\nAjustes']],
-      function () { return UI.moreTab; }, function (v) { UI.moreTab = v; if (v === 'set') r.bakDirty = true; });
+    r.seg = seg([['fin', '💰\nFinanças'], ['ach', '🏅\nConquistas'], ['tour', '🏆\nTorneios'], ['legacy', '🌅\nLegado'], ['set', '⚙️\nAjustes']],
+      function () { return UI.moreTab; }, function (v) { UI.moreTab = v; UI.finForce = true; if (v === 'set') r.bakDirty = true; });
     r.seg.classList.add('seg-icons');
     el.appendChild(r.seg);
 
@@ -842,7 +1007,14 @@
     // Finanças
     r.fin = h('div');
     r.finInc = h('div', { class: 'card' }); r.finNw = h('div', { class: 'card' }); r.finStats = h('div', { class: 'card' });
-    add(r.fin, [h('h2', { text: 'Fluxo por segundo' }), r.finInc, h('h2', { text: 'Patrimônio líquido' }), r.finNw, h('h2', { text: 'Estatísticas' }), r.finStats]);
+    r.nwCanvas = h('canvas', { class: 'chart', 'aria-label': 'Gráfico de evolução do patrimônio' });
+    r.nwInfo = h('div', { class: 'muted small', style: 'margin-top:6px' });
+    r.finMix = h('div', { class: 'card' });
+    r.finRank = h('div', { class: 'card' });
+    add(r.fin, [h('h2', { text: 'Evolução do patrimônio' }), h('div', { class: 'card' }, r.nwCanvas, r.nwInfo),
+      h('h2', { text: 'Fluxo por segundo' }), r.finInc, h('h2', { text: 'De onde vem sua renda' }), r.finMix,
+      h('h2', { text: 'Ranking das suas empresas' }), r.finRank,
+      h('h2', { text: 'Patrimônio líquido' }), r.finNw, h('h2', { text: 'Estatísticas' }), r.finStats]);
     el.appendChild(r.fin);
 
     // Torneio
@@ -851,8 +1023,10 @@
     r.tourClaim = h('button', { class: 'btn wide pink hidden', style: 'margin-bottom:10px' });
     r.tourClaim.addEventListener('click', function () { UI.claimTour(); });
     r.tourRank = h('div', { class: 'card' });
-    add(r.tour, [r.tourHead, r.tourClaim, h('h2', { text: 'Classificação' }), r.tourRank,
-      h('div', { class: 'card small', html: '<b>Prêmios no fim da semana</b><br>🥇 1º: 30 min de renda + Turbo x1,5 por 2h<br>🥈 2º–3º: 20 min + x1,5 por 1h<br>🏅 4º–5º: 10 min + x1,5 por 30 min<br>🎗️ Demais: 3 min de renda<br><span class="muted">Pontuação = lucro realizado com vendas de ações e cripto na semana. Rivais simulados localmente (jogo 100% offline).</span>' })]);
+    r.tourRules = h('div', { class: 'card small' });
+    UI.tourKind = UI.tourKind || 'stock';
+    r.tourSeg = seg([['stock', '📈 Bolsa'], ['race', '🏁 Corrida Empresarial']], function () { return UI.tourKind; }, function (v) { UI.tourKind = v; });
+    add(r.tour, [r.tourSeg, r.tourHead, r.tourClaim, h('h2', { text: 'Classificação' }), r.tourRank, r.tourRules]);
     el.appendChild(r.tour);
 
     // Legado
@@ -860,9 +1034,10 @@
     r.legInfo = h('div', { class: 'card stat-hero' });
     r.legBtn = h('button', { class: 'btn wide pink', id: 'legacyBtn' });
     r.legBtn.addEventListener('click', function () { UI.confirmPrestige(); });
-    add(r.legacy, [r.legInfo, r.legBtn, h('div', { class: 'card small', html:
+    r.legRanks = h('div', { class: 'card' });
+    add(r.legacy, [r.legInfo, r.legBtn, h('h2', { text: 'Patentes de Legado' }), r.legRanks, h('div', { class: 'card small', html:
       '<b>Como funciona o Legado</b><br>Você recomeça do zero, mas cada ⭐ Estrela de Legado dá <b>+10% de renda permanente</b> (negócios, salário, aluguel e toque).<br><br>' +
-      '<b>Mantém:</b> estrelas, itens de luxo, metas, estatísticas, torneio.<br><b>Zera:</b> dinheiro, negócios, carreira, habilidades, imóveis e investimentos.<br><br>' +
+      '<b>Mantém:</b> estrelas, itens de luxo, conquistas, medalhas e Loja de Mérito, metas, estatísticas e torneios.<br><b>Zera:</b> dinheiro, negócios e melhorias, carreira, habilidades, imóveis/reformas e investimentos.<br>Cada Legado também rende 🎖️ Medalhas de Mérito.<br><br>' +
       '<span class="muted">Estrelas = √(faturamento total ÷ 100 M) − estrelas já recebidas.</span>' })]);
     el.appendChild(r.legacy);
 
@@ -1021,28 +1196,76 @@
           '<span>Lucro na bolsa</span><b class="' + (s.stats.tradeProfit >= 0 ? 'pos' : 'neg') + '">' + F.money(s.stats.tradeProfit) + '</b>' +
           '<span>Corretagem paga</span><b>' + F.money(s.stats.fees) + '</b>' +
           '<span>Legados feitos</span><b>' + s.prestiges + '</b>' +
+          '<span>Dividendos recebidos</span><b>' + F.money(s.stats.divEarned) + '</b>' +
+          '<span>Ganhos offline</span><b>' + F.money(s.stats.offlineEarned) + '</b>' +
+          '<span>Melhorias / reformas compradas</span><b>' + F.num(s.stats.upgBought) + ' / ' + F.num(s.stats.renoDone) + '</b>' +
           '<span>Tempo de jogo</span><b>' + F.time(s.stats.playSec) + '</b></div>');
+        // gráfico, composição e ranking mudam devagar: reconstruídos 1× por segundo (não a cada 200 ms)
+        if (!UI.finForce && r.finTick && now - r.finTick < 1000) return;
+        UI.finForce = false;
+        r.finTick = now;
+        var hist = s.nwHist.map(function (x) { return x.v; }).concat([nw]);
+        UI.drawArea(r.nwCanvas, hist, '#ffc93c');
+        var first = s.nwHist[0];
+        txt(r.nwInfo, first ? 'Últimas ' + F.time((now - first.t) / 1000) + ': ' + F.money(first.v) + ' → ' + F.money(nw) +
+          (first.v > 0 ? ' (' + F.pct(nw / first.v - 1, 0) + ')' : '') : 'O histórico registra seu patrimônio a cada minuto de jogo.');
+        // composição da renda
+        var mix = [['🏪 Negócios', b.biz - b.empUpkeep, '#2ee6a8'], ['🏠 Aluguéis', b.rent - b.rentUpkeep, '#4cc9f0'], ['💹 Dividendos', b.div, '#b388ff'], ['💼 Salário', b.salary, '#ffc93c']];
+        var tot = mix.reduce(function (a, x) { return a + Math.max(0, x[1]); }, 0) || 1;
+        html(r.finMix, mix.map(function (x) {
+          var f = Math.max(0, x[1]) / tot;
+          return '<div class="mix-row"><span>' + x[0] + '</span><b>' + F.money(Math.max(0, x[1]), true) + '/s · ' + Math.round(f * 100) + '%</b></div>' +
+            '<div class="bar mix"><i style="width:' + (f * 100).toFixed(1) + '%;background:' + x[2] + '"></i></div>';
+        }).join(''));
+        // ranking das empresas (renda líquida/s com gerente; manuais pelo valor de 1 ciclo/s)
+        var rows = D.BUSINESSES.filter(function (bz) { return s.biz[bz.id].lvl > 0; }).map(function (bz) {
+          var st = s.biz[bz.id];
+          var inc = (E.bizIncome(s, bz.id, now) - E.bizUpkeep(s, bz.id)) * (st.mgr ? 1 : 0);
+          return { b: bz, inc: inc, earned: st.earned, mgr: st.mgr };
+        }).sort(function (a, b2) { return b2.inc - a.inc || b2.earned - a.earned; });
+        var totInc = rows.reduce(function (a, x) { return a + x.inc; }, 0) || 1;
+        html(r.finRank, rows.length ? '<table class="rank">' + rows.map(function (x, i) {
+          return '<tr><td>' + (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1) + 'º') + '</td><td>' + x.b.icon + ' ' + esc(x.b.name) +
+            '<div class="muted small">' + (x.mgr ? Math.round(x.inc / totInc * 100) + '% da renda' : 'sem gerente (manual)') + ' · total ' + F.money(x.earned) + '</div></td>' +
+            '<td>' + (x.mgr ? F.money(x.inc, true) + '/s' : '—') + '</td></tr>';
+        }).join('') + '</table>' : '<div class="muted">Abra seu primeiro negócio para aparecer aqui.</div>');
       } else if (t === 'tour') {
-        var rank = M.ranking(s, now);
+        r.tourSeg.refresh();
+        var race = UI.tourKind === 'race';
+        var rank = race ? M.raceRanking(s, now) : M.ranking(s, now);
         var me = rank.findIndex(function (x) { return x.me; }) + 1;
-        html(r.tourHead, '<div class="row"><div style="font-size:40px">🏆</div><div class="grow"><div class="title wrap">Torneio Semanal da Bolsa</div>' +
-          '<div class="sim-tag">Modo offline · rivais simulados no aparelho</div>' +
+        var best = race ? s.race.best : s.tour.best, pend = race ? s.race.pending : s.tour.pending;
+        html(r.tourHead, '<div class="row"><div style="font-size:40px">' + (race ? '🏁' : '🏆') + '</div><div class="grow"><div class="title wrap">' + (race ? 'Corrida Empresarial' : 'Torneio Semanal da Bolsa') + '</div>' +
+          '<div class="sim-tag">Modo offline · rivais simulados no aparelho (🤖)</div>' +
           '<div class="muted">Termina em ' + F.time((M.weekEnd(s.tour.week) - now) / 1000) + ' · Sua posição: <b style="color:var(--gold)">#' + me + '</b>' +
-          (s.tour.best ? ' · Melhor: #' + s.tour.best : '') + '</div></div></div>');
+          (best ? ' · Melhor: #' + best : '') + '</div></div></div>');
         html(r.tourRank, '<table class="rank">' + rank.map(function (x, i) {
-          return '<tr class="' + (x.me ? 'me' : '') + '"><td>' + (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1) + 'º') + '</td><td>' + x.name + '</td><td>' + F.money(x.score) + '</td></tr>';
+          return '<tr class="' + (x.me ? 'me' : '') + '"><td>' + (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1) + 'º') + '</td><td>' + esc(x.name) + '</td><td>' + F.money(x.score) + '</td></tr>';
         }).join('') + '</table>');
-        show(r.tourClaim, !!s.tour.pending);
-        if (s.tour.pending) html(r.tourClaim, '🎁 Resgatar prêmio da semana passada (#' + s.tour.pending.rank + ')');
+        show(r.tourClaim, !!pend);
+        if (pend) html(r.tourClaim, '🎁 Resgatar prêmio da semana passada (#' + pend.rank + ')');
+        html(r.tourRules, '<b>Regras</b><br>' + (race
+          ? 'Pontuação = seu <b>faturamento produtivo</b> na semana (toques, negócios, salário, aluguéis e dividendos). Prêmios, bônus e ganhos de missões não contam.'
+          : 'Pontuação = <b>lucro realizado</b> com vendas de ações e cripto na semana (vendas com prejuízo descontam).') +
+          '<br>A semana vai de segunda 00:00 a domingo 23:59 (horário de Brasília).<br><br><b>Prêmios</b><br>' +
+          '🥇 1º: 30 min de renda + 25 🎖️' + (race ? '' : ' + Turbo x1,5 por 2h') + '<br>🥈 2º–3º: 20 min + 15 🎖️' + (race ? '' : ' + x1,5 por 1h') +
+          '<br>🏅 4º–5º: 10 min + 8 🎖️' + (race ? '' : ' + x1,5 por 30 min') + '<br>🎗️ Demais (pontuação > 0): 3 min + 2 🎖️' +
+          '<br><span class="muted">Os 9 rivais são simulados localmente (marcados com 🤖) e acompanham o seu ritmo de crescimento. Não há jogadores reais nem conexão com servidor.</span>');
       } else if (t === 'legacy') {
         var pot = E.potentialStars(s);
         var nextAt = Math.pow(s.starsClaimed + pot + 1, 2) * D.STAR_DIVISOR;
-        html(r.legInfo, '<div class="muted">Estrelas de Legado</div><div class="v">⭐ ' + s.stars + '</div>' +
-          '<div class="muted">Bônus permanente atual: <b class="pos">+' + Math.round(s.stars * D.STAR_BONUS * 100) + '%</b></div>' +
-          '<div style="margin-top:10px;font-size:15px">Se fundar um Legado agora: <b style="color:var(--gold)">+' + pot + ' ⭐</b></div>' +
+        html(r.legInfo, '<div class="muted">Estrelas de Legado · ' + D.LEGACY_RANKS[E.legacyRank(s)].icon + ' ' + D.LEGACY_RANKS[E.legacyRank(s)].name + '</div><div class="v">⭐ ' + F.num(s.stars) + '</div>' +
+          '<div class="muted">Bônus permanente atual: <b class="pos">+' + F.num(Math.round(s.stars * D.STAR_BONUS * 100)) + '%</b></div>' +
+          '<div style="margin-top:10px;font-size:15px">Se fundar um Legado agora: <b style="color:var(--gold)">+' + F.num(pot) + ' ⭐</b></div>' +
           '<div class="muted">Próxima estrela ao faturar ' + F.money(nextAt) + ' no total (' + F.money(s.lifetimeEarned) + ' até agora)</div>');
-        btnLabel(r.legBtn, pot > 0 ? '🌅 Fundar Legado (+' + pot + ' ⭐)' : 'Fature mais para ganhar estrelas', pot > 0 ? 'recomeçar com +' + Math.round((s.stars + pot) * 10) + '% de renda' : '');
+        btnLabel(r.legBtn, pot > 0 ? '🌅 Fundar Legado (+' + F.num(pot) + ' ⭐)' : 'Fature mais para ganhar estrelas', pot > 0 ? 'recomeçar com +' + F.num(Math.round((s.stars + pot) * 10)) + '% de renda' : '');
         cls(r.legBtn, 'off', pot < 1);
+        var cur = E.legacyRank(s), nxt = D.LEGACY_RANKS[cur + 1];
+        html(r.legRanks, (nxt ? '<div class="muted small">Próxima patente: <b>' + nxt.icon + ' ' + nxt.name + '</b> com ' + F.num(nxt.stars) + ' ⭐ (' + F.num(s.stars) + ' agora)</div>' +
+          '<div class="bar big"><i style="width:' + Math.min(100, s.stars / nxt.stars * 100).toFixed(1) + '%"></i></div>' : '<div class="muted small">Você alcançou a patente máxima!</div>') +
+          D.LEGACY_RANKS.map(function (rk, i) {
+            return '<div class="rank-row ' + (i <= cur ? 'got' : '') + '"><div class="rk-ico">' + rk.icon + '</div><div class="grow"><b>' + rk.name + '</b> · ' + F.num(rk.stars) + ' ⭐<div class="muted small">' + rk.perk + '</div></div>' + (i <= cur ? '<b class="pos">✓</b>' : '') + '</div>';
+          }).join(''));
       } else {
         r.toggles.forEach(function (tg) { cls(tg.sw, 'on', !!s.settings[tg.key]); tg.setAttribute('aria-checked', String(!!s.settings[tg.key])); });
         var storeOn = root.Store.available(), adsOn = root.AdService.available();
@@ -1070,6 +1293,7 @@
       '<p>Mantém: estrelas, luxo, metas e estatísticas.<br>Zera: dinheiro, negócios, carreira, habilidades, imóveis e investimentos.</p>',
       buttons: [
         { label: 'Fundar Legado', cls: 'btn pink', fn: function () {
+          UI.burstAt(window.innerWidth / 2, window.innerHeight / 2, 28, true);
           var g = G.prestige();
           root.Sfx.big(); vibrate(40);
           root.Game.save();
@@ -1080,11 +1304,12 @@
   };
 
   UI.claimTour = function () {
-    var res = G.claimTourReward();
+    var res = UI.tourKind === 'race' ? G.claimRaceReward() : G.claimTourReward();
     if (!res) return;
     root.Sfx.big();
     UI.modal({ icon: '🏆', title: res.label + ' — #' + res.rank, html: '<div class="big-num">+' + F.money(res.cash) + '</div>' +
-      (res.boostH ? '<p>Turbo x1,5 por ' + F.time(res.boostH * 3600) + ' ativado!</p>' : '<p>Continue negociando para subir no ranking!</p>') });
+      '<p>+' + res.medals + ' 🎖️ Medalhas de Mérito</p>' +
+      (res.boostH ? '<p>Turbo x1,5 por ' + F.time(res.boostH * 3600) + ' ativado!</p>' : '<p>Continue jogando para subir no ranking!</p>') });
     root.Game.save();
     UI.update();
   };
@@ -1166,18 +1391,29 @@
     var s = G.s;
     var bizAlert = D.BUSINESSES.some(function (b) {
       var st = s.biz[b.id];
-      return (st.lvl === 0 && s.cash >= E.bizCost(s, b.id, 1)) || (st.lvl > 0 && !st.mgr && s.cash >= b.mgr) ||
+      var ui = st.lvl > 0 ? G.upgradeInfo(b.id) : null;
+      return (st.lvl === 0 && s.cash >= E.bizCost(s, b.id, 1)) || (st.lvl > 0 && !st.mgr && s.cash >= E.mgrCost(s, b.id)) ||
+        (ui && !ui.done && !ui.locked && s.cash >= ui.cost) ||
         s.events.some(function (e) { return e.biz === b.id && e.cost && e.until > Date.now(); });
     });
     cls(tabBtns.biz, 'alert', bizAlert && UI.tab !== 'biz');
-    cls(tabBtns.more, 'alert', !!s.tour.pending || (E.potentialStars(s) >= Math.max(1, Math.ceil(s.stars * 0.5)) && E.potentialStars(s) > 0));
+    cls(tabBtns.more, 'alert', !!s.tour.pending || !!s.race.pending || (E.potentialStars(s) >= Math.max(1, Math.ceil(s.stars * 0.5)) && E.potentialStars(s) > 0));
     var nextJob = D.JOBS[s.jobs];
-    var dailyReady = !!s.daily && (G.dailyBonusReady() || s.daily.list.some(function (m) { return !m.claimed && G.dailyProgress(m).done; }));
+    var dailyReady = !!s.daily && (G.dailyBonusReady() || s.daily.list.some(function (m) { return !m.claimed && G.dailyProgress(m).done; })) ||
+      !!s.weekly && (G.weeklyBonusReady() || s.weekly.list.some(function (m) { return !m.claimed && G.weeklyProgress(m).done; }));
+    var meritReady = D.MERIT_SHOP.some(function (m) { return E.meritLvl(s, m.id) < m.max && s.merit.bal >= G.meritCost(m.id); });
+    cls(tabBtns.lux, 'alert', UI.tab !== 'lux' && G.isUnlocked('lux') && meritReady);
     cls(tabBtns.home, 'alert', UI.tab !== 'home' && ((!!nextJob && s.cash >= nextJob.cost) || dailyReady));
     Object.keys(D.UNLOCKS).forEach(function (k) { cls(tabBtns[k], 'locked', !G.isUnlocked(k)); });
   };
 
+  var shownCash = 0;
   UI.frame = function () {
+    // contagem animada do saldo (interpolação exponencial; pula direto em "reduzir animações")
+    var target = G.s.cash;
+    if (UI.reduceMotion() || !isFinite(shownCash) || Math.abs(target - shownCash) < Math.max(1, target * 1e-4)) shownCash = target;
+    else shownCash += (target - shownCash) * 0.22;
+    txt(hud.cash, F.money(shownCash));
     var sc = UI.screens[shownScreen()];
     if (sc && sc.frame) sc.frame();
   };

@@ -636,6 +636,7 @@
     // verificações mais pesadas 4x por segundo, não a cada frame
     slowAcc += dt;
     if (slowAcc >= 0.25) {
+      var slowDt = slowAcc; // tempo real acumulado (frames longos em aparelhos lentos não "perdem" tempo)
       slowAcc = 0;
       clampTimers(now);
       checkGoals(now);
@@ -643,7 +644,7 @@
       checkUnlocks();
       checkTournament(now);
       G.ensureDaily(now);
-      if (G.metaTick) G.metaTick(now, 0.25);
+      if (G.metaTick) G.metaTick(now, slowDt);
     }
   };
 

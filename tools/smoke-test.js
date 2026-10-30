@@ -141,7 +141,7 @@ function check(name, ok, info) { results.push({ name, ok: !!ok, info }); console
   await page.locator('#scr-more .seg button', { hasText: 'Conquistas' }).click();
   await wait(200);
   const achDone = await page.locator('.ach.done').count();
-  check('Conquistas listadas e algumas concluídas', await page.locator('.ach').count() === 31 && achDone >= 3, 'concluídas=' + achDone);
+  check('Conquistas listadas e algumas concluídas', await page.locator('.ach').count() === await page.evaluate(() => D.ACHIEVEMENTS.length) && achDone >= 3, 'concluídas=' + achDone);
   await shot('09-conquistas');
   await page.locator('#scr-more .seg button', { hasText: 'Torneio' }).click();
   await wait(200);
@@ -286,6 +286,80 @@ function check(name, ok, info) { results.push({ name, ok: !!ok, info }); console
   });
   check('UI.update rápido (< 4 ms em média)', perf.upd < 4, perf.upd.toFixed(2) + ' ms');
   check('Sem vazamento de elementos após 400 toques', perf.fx === 0 && Math.abs(perf.n1 - perf.n0) < 40, JSON.stringify(perf));
+
+  // ---- v2.0: sistemas novos ----
+  await page.evaluate(() => { document.getElementById('toasts').innerHTML = ''; G.earn(1e12); G.addMedals(300, 'teste'); UI.go('home'); });
+  check('Banner do evento de setor na tela Início', /\+25% em/.test(await page.locator('.sector-banner').innerText()));
+  await page.locator('#dailyCard .seg button', { hasText: 'Semanais' }).click();
+  await wait(200);
+  check('Aba de desafios semanais com 3 desafios', /Desafios da semana/.test(await page.locator('#dailyCard').innerText()) && await page.locator('#dailyCard .mission:visible').count() === 3);
+  await page.locator('#dailyCard .seg button', { hasText: 'Diárias' }).click();
+  // empresa: detalhe e melhoria
+  await page.locator('#tabbar [data-tab=biz]').click();
+  await page.evaluate(() => { G.buyBiz('suco', 30); UI.update(); });
+  await wait(250);
+  await page.locator('#biz-suco .upg-pill').click();
+  await page.waitForSelector('.modal .biz-detail');
+  const det = await page.locator('.modal').innerText();
+  check('Detalhe da empresa mostra estatísticas e melhorias', /Ciclos concluídos/.test(det) && /Campanha de marketing/.test(det) && /Eficiência/.test(det));
+  await shot('v2-01-detalhe-empresa');
+  await page.locator('.modal .upg-row').first().locator('button').click();
+  await wait(250);
+  check('Comprar melhoria pelo detalhe da empresa', await page.evaluate(() => G.s.biz.suco.up) === 1);
+  await page.locator('.modal .btn', { hasText: 'Fechar' }).click();
+  await page.evaluate(() => { const e = document.querySelector('#biz-suco'); e.scrollIntoView({ block: 'center' }); });
+  await wait(200);
+  await shot('v2-02-negocios');
+  // imóveis: reforma
+  await page.locator('#tabbar [data-tab=inv]').click();
+  await page.locator('#scr-inv .seg button', { hasText: 'Imóveis' }).click();
+  await page.evaluate(() => { G.buyProp('kitnet'); UI.update(); });
+  await wait(250);
+  await page.locator('#prop-kitnet .upg-pill').click();
+  check('Reformar imóvel', await page.evaluate(() => E.renoLvl(G.s, 'kitnet')) === 1);
+  await page.locator('#scr-inv .seg button', { hasText: 'Ações' }).click();
+  await page.evaluate(() => { G.buyAsset('MEL', 100); UI.update(); });
+  await wait(250);
+  check('Resumo da carteira com dividendos', /dividendos/i.test(await page.locator('#scr-inv .portfolio').first().innerText()));
+  // loja de mérito e exclusivo
+  await page.locator('#tabbar [data-tab=lux]').click();
+  await page.locator('#scr-lux .seg button', { hasText: 'Loja de Mérito' }).click();
+  await wait(200);
+  await page.locator('#merit-minc').click();
+  check('Comprar melhoria na Loja de Mérito', await page.evaluate(() => E.meritLvl(G.s, 'minc')) === 1);
+  await shot('v2-03-loja-merito');
+  await page.locator('#scr-lux .seg button', { hasText: 'Coleção' }).click();
+  await page.locator('#lux-x1 .btn').click();
+  check('Resgatar exclusivo de mérito', await page.evaluate(() => G.s.lux.x1 === true));
+  // perfil
+  await page.locator('#hud .profile').click();
+  await page.waitForSelector('.modal');
+  check('Perfil do império abre com nível, patente e medalhas', /nível do império/i.test(await page.locator('.modal').innerText()));
+  await shot('v2-04-perfil');
+  await page.locator('.modal .btn', { hasText: 'Fechar' }).click();
+  // finanças: gráfico e ranking
+  await page.evaluate(() => { G.sampleNetWorth(Date.now() - 120000); G.sampleNetWorth(Date.now() - 60000); });
+  await page.locator('#tabbar [data-tab=more]').click();
+  await page.locator('#scr-more .seg button', { hasText: 'Finanças' }).click();
+  await wait(300);
+  const fin2 = await page.locator('#scr-more').innerText();
+  check('Finanças: evolução do patrimônio, composição e ranking de empresas', /evolução do patrimônio/i.test(fin2) && /de onde vem sua renda/i.test(fin2) && /Suco da Esquina/.test(fin2));
+  await shot('v2-05-financas');
+  // corrida empresarial: resgate de prêmio pendente
+  await page.evaluate(() => { G.s.race.pending = { rank: 2, week: G.s.race.week - 1, score: 1e9 }; });
+  await page.locator('#scr-more .seg button', { hasText: 'Torneios' }).click();
+  await page.locator('#scr-more .seg button', { hasText: 'Corrida' }).click();
+  await wait(250);
+  const bal0 = await page.evaluate(() => G.s.merit.bal);
+  await page.locator('#scr-more button', { hasText: 'Resgatar prêmio' }).click();
+  await wait(250);
+  check('Resgatar prêmio da Corrida Empresarial (medalhas)', await page.evaluate((b) => G.s.merit.bal === b + 15 && !G.s.race.pending, bal0));
+  await page.locator('.modal .btn').first().click();
+  await shot('v2-06-corrida');
+  await page.locator('#scr-more .seg button', { hasText: 'Legado' }).click();
+  await wait(200);
+  check('Legado mostra patentes', /patentes de legado/i.test(await page.locator('#scr-more').innerText()) && /Barão/.test(await page.locator('#scr-more').innerText()));
+  await page.evaluate(() => { document.getElementById('toasts').innerHTML = ''; UI.go('home'); });
 
   // ---- v1.1.1: funcionalidades revisadas ----
   await page.evaluate(() => { document.getElementById('toasts').innerHTML = ''; UI.go('home'); });

@@ -794,3 +794,293 @@ test('custo de funcionário nunca supera a fórmula da v1.1.0 e é sempre finito
     }
   }
 });
+
+// =====================================================================
+// v2.0
+// =====================================================================
+test('melhorias de empresa: sequência, nível mínimo, custo e efeito', () => {
+  const s = fresh({ cash: 1e16 });
+  noRewards(s);
+  G.buyBiz('suco', 10);
+  let info = G.upgradeInfo('suco');
+  assert.equal(info.locked, true);
+  assert.equal(G.buyUpgrade('suco'), false, 'exige nível 25');
+  G.buyBiz('suco', 15);
+  const r0 = E.bizRevenue(s, 'suco', clock, true), t0 = E.bizTime(s, 'suco');
+  info = G.upgradeInfo('suco');
+  close(info.cost, 10 * D.BIZ_UPGRADES[0].costMul);
+  const c0 = s.cash;
+  assert.equal(G.buyUpgrade('suco'), true);
+  close(c0 - s.cash, info.cost);
+  close(E.bizRevenue(s, 'suco', clock, true), r0 * 1.5);
+  assert.equal(G.buyUpgrade('suco'), false, 'automação exige nível 75');
+  G.buyBiz('suco', 50);
+  assert.equal(G.buyUpgrade('suco'), true);
+  close(E.bizTime(s, 'suco'), t0 / 1.25);
+  G.buyBiz('suco', 75);
+  assert.equal(G.buyUpgrade('suco'), true);
+  assert.equal(G.upgradeInfo('suco').done, true);
+  assert.equal(G.buyUpgrade('suco'), false);
+  assert.equal(E.upgCount(s), 3);
+  assert.equal(s.stats.upgBought, 3);
+});
+
+test('eficiência sobe com ciclos concluídos e dá +5% por patamar', () => {
+  const s = fresh({ cash: 1e9 });
+  noRewards(s);
+  G.buyBiz('suco', 10); G.hireManager('suco');
+  assert.equal(E.effLevel(s, 'suco'), 0);
+  const r0 = E.bizRevenue(s, 'suco', clock, true);
+  advance(152); // > 100 ciclos de 1,5 s
+  assert.ok(s.biz.suco.runs >= 100);
+  assert.equal(E.effLevel(s, 'suco'), 1);
+  close(E.bizRevenue(s, 'suco', clock, true), r0 * 1.05);
+  s.biz.suco.runs = 2e6;
+  assert.equal(E.effLevel(s, 'suco'), 5);
+});
+
+test('estatísticas por empresa batem com o dinheiro e salários', () => {
+  const s = fresh({ cash: 1e9 });
+  noRewards(s);
+  G.buyBiz('burger', 20); G.hireManager('burger'); G.hireEmployee('burger');
+  const c0 = s.cash;
+  advance(40);
+  close(s.biz.burger.earned, s.cash - c0, 1e-9);
+  close(s.stats.wagesPaid, s.biz.burger.wages, 1e-9);
+  assert.equal(s.biz.burger.runs, s.stats.bizRuns);
+});
+
+test('reforma: exige imóvel, custa conforme a fórmula, +20% de aluguel e tem limite', () => {
+  const s = fresh({ cash: 1e30 });
+  assert.equal(G.renovate('kitnet'), false, 'sem imóvel não reforma');
+  G.buyProp('kitnet');
+  const rent0 = E.propRent(s, 'kitnet');
+  close(E.renoCost(s, 'kitnet'), 5000 * 3);
+  assert.equal(G.renovate('kitnet'), true);
+  close(E.propRent(s, 'kitnet'), rent0 * 1.2);
+  close(E.renoCost(s, 'kitnet'), 5000 * 3 * 2.2);
+  for (let i = 0; i < 20; i++) G.renovate('kitnet');
+  assert.equal(E.renoLvl(s, 'kitnet'), D.RENO_MAX);
+  assert.equal(G.renovate('kitnet'), false);
+});
+
+test('dividendos: taxa correta, pagos no laço, no offline e não em cripto', () => {
+  const s = fresh({ cash: 1e9 });
+  noRewards(s);
+  G.buyAsset('MEL', 1000);
+  G.buyAsset('BYTE', 10);
+  const p = s.mkt.MEL.p;
+  close(E.dividendRate(s), 1000 * p * 0.03 / 3600);
+  G.resetFlow();
+  const d0 = s.stats.divEarned;
+  advance(10);
+  assert.ok(s.stats.divEarned - d0 > 0);
+  const b = E.breakdown(s, clock, true);
+  close(b.div, E.dividendRate(s));
+  G.touch(clock);
+  clock += 3600 * 1000;
+  const off = G.computeOffline();
+  close(off.parts.div, b.div * 3600, 0.05); // preço muda levemente durante a simulação offline da bolsa
+  assert.ok(off.amount >= off.parts.div * 0.95);
+});
+
+test('Medalhas de Mérito: loja com custo crescente, limite e permanência no Legado', () => {
+  const s = fresh();
+  G.addMedals(500, 'teste');
+  const c1 = G.meritCost('minc');
+  assert.equal(G.buyMerit('minc'), true);
+  assert.equal(s.merit.bal, 500 - c1);
+  assert.ok(G.meritCost('minc') > c1);
+  const m0 = E.globalMult(s, clock, true);
+  assert.equal(G.buyMerit('minc'), true);
+  close(E.globalMult(s, clock, true), m0 * (1 + 0.1) / (1 + 0.05));
+  for (let i = 0; i < 20; i++) G.buyMerit('mquick');
+  assert.equal(E.meritLvl(s, 'mquick'), 3);
+  assert.equal(G.buyMerit('nada'), false);
+  s.lifetimeEarned = 1e10;
+  G.prestige();
+  assert.equal(E.meritLvl(G.s, 'minc'), 2, 'loja de mérito sobrevive ao Legado');
+  assert.ok(G.s.merit.bal > 0);
+});
+
+test('exclusivos de mérito não podem ser comprados com dinheiro', () => {
+  const s = fresh({ cash: 1e300 });
+  assert.equal(G.buyLux('x1'), false);
+  assert.equal(s.lux.x1, undefined);
+  assert.equal(G.buyMeritLux('x1'), false, 'sem medalhas');
+  G.addMedals(60, 't');
+  assert.equal(G.buyMeritLux('x1'), true);
+  assert.equal(s.lux.x1, true);
+  assert.equal(s.merit.bal, 0);
+  assert.equal(G.buyMeritLux('x1'), false, 'não compra duas vezes');
+});
+
+test('nível do império: medalhas pagas uma vez por nível', () => {
+  const s = fresh();
+  noRewards(s); // conquistas já marcadas: só o império paga medalhas aqui
+  s.lifetimeEarned = 1e6; // nível 12
+  advance(0.5);
+  assert.equal(E.empireLevel(s), 12);
+  assert.equal(s.empire.claimed, 12);
+  const bal = s.merit.bal;
+  assert.equal(bal, 12 * 2 + 2 * 5, '2 por nível + 5 nos níveis 5 e 10');
+  advance(5);
+  assert.equal(s.merit.bal, bal, 'sem pagamento duplicado');
+});
+
+test('desafios semanais: geração, progresso, resgate único, bônus e relógio atrasado', () => {
+  const s = fresh();
+  advance(0.5);
+  assert.ok(s.weekly && s.weekly.list.length === 3);
+  const wk = s.weekly.week;
+  s.weekly.list.forEach((m) => { s.stats[D.WEEKLY_BY_ID[m.id].stat] += m.target; });
+  const b0 = s.merit.bal;
+  [0, 1, 2].forEach((i) => assert.ok(G.claimWeekly(i)));
+  assert.equal(G.claimWeekly(0), null);
+  assert.ok(s.merit.bal > b0);
+  assert.equal(G.claimWeeklyBonus(), D.WEEKLY_BONUS_MEDALS);
+  assert.equal(G.claimWeeklyBonus(), 0);
+  assert.equal(G.ensureWeekly(clock - 30 * 86400000), false, 'relógio atrasado não gera semana nova');
+  clock += 7 * 86400000;
+  assert.equal(G.ensureWeekly(clock), true);
+  assert.ok(s.weekly.week > wk);
+});
+
+test('Corrida Empresarial: pontua faturamento produtivo, premia uma vez e ignora semana regredida', () => {
+  const s = fresh({ cash: 1e6 });
+  advance(0.5);
+  assert.notEqual(s.race.week, null);
+  G.earnReward(1e12);
+  assert.equal(M.raceScore(s), 0, 'prêmios não contam');
+  s.stats.prodEarned += 1e15;
+  assert.ok(M.raceScore(s) > 0);
+  clock += 8 * 86400000;
+  advance(0.5);
+  assert.ok(s.race.pending);
+  assert.equal(s.race.pending.rank, 1);
+  const r = G.claimRaceReward();
+  assert.ok(r && r.medals === 25);
+  assert.equal(G.claimRaceReward(), null);
+  const wk = s.race.week;
+  G.checkRace(clock - 21 * 86400000);
+  assert.equal(s.race.week, wk);
+  assert.equal(s.race.pending, null);
+});
+
+test('evento de setor: rodízio determinístico a cada 2 dias e multiplica só as categorias do evento', () => {
+  const a = E.sectorEventAt(Date.UTC(2026, 9, 10, 12));
+  const b = E.sectorEventAt(Date.UTC(2026, 9, 10, 20));
+  assert.equal(a.ev.id, b.ev.id);
+  const seen = new Set();
+  for (let d = 0; d < 12; d++) seen.add(E.sectorEventAt(Date.UTC(2026, 9, 1 + d * 2, 12)).ev.id);
+  assert.equal(seen.size, D.SECTOR_EVENTS.length);
+  const t = Date.UTC(2026, 9, 10, 12), ev = E.sectorEventAt(t).ev;
+  D.BUSINESSES.forEach((bz) => assert.equal(E.sectorMult(bz.id, t), ev.cats.includes(bz.cat) ? ev.mult : 1));
+  assert.ok(E.sectorEventAt(t).ends > t);
+});
+
+test('patentes de Legado: kits iniciais e descontos', () => {
+  let s = fresh();
+  s.lifetimeEarned = 1e8 * 100 * 100; s.stars = 0; s.starsClaimed = 0; // dará 100 estrelas
+  G.prestige();
+  s = G.s;
+  assert.equal(s.stars, 100);
+  assert.equal(E.legacyRank(s), 2);
+  assert.equal(s.biz.suco.lvl, 25, 'Barão: Suco nível 25');
+  assert.equal(s.biz.suco.mgr, true);
+  assert.equal(s.jobs, 1, 'Herdeiro: emprego Panfleteiro');
+  s.stars = 1e4;
+  close(E.mgrCost(s, 'burger'), D.BUSINESSES[1].mgr * 0.75, 1e-9);
+  const off0 = E.offlineCapHours(s);
+  assert.ok(off0 >= D.OFFLINE_BASE_H + 2, 'Conde: +2h offline');
+});
+
+test('save v2 (1.1.x) migra para v3 com presente e sem enxurrada de níveis', () => {
+  fresh();
+  const v2 = { v: 2, cash: 100, runEarned: 1e9, lifetimeEarned: 1e9, biz: { suco: { lvl: 30, emp: 2, mgr: true } },
+               ach: { tap100: true, biz3: true, mgr1: true }, stats: { taps: 200 } };
+  G.storage.setItem(D.SAVE_KEY, JSON.stringify(v2));
+  assert.equal(G.load().status, 'ok');
+  const s = G.s;
+  assert.equal(s.v, 3);
+  assert.equal(s.biz.suco.lvl, 30);
+  assert.equal(s.biz.suco.up, 0);
+  assert.equal(s.empire.claimed, 18);
+  assert.equal(s.upgradeGift, 3 + 2 * 18);
+  assert.equal(s.merit.bal, 3 + 2 * 18);
+  const bal = s.merit.bal, ach0 = Object.keys(s.ach).length;
+  advance(1);
+  assert.equal(s.empire.claimed, 18);
+  assert.equal(s.merit.bal - bal, Object.keys(s.ach).length - ach0, 'só conquistas novas pagam; níveis já alcançados não');
+});
+
+test('campos v3 maliciosos são saneados', () => {
+  fresh();
+  const evil = {
+    v: 3, biz: { suco: { lvl: 5, up: 99, runs: -4, earned: 'x', wages: Infinity }, burger: { lvl: 0, up: 3 } },
+    reno: { kitnet: 50, apto: 3 }, props: { apto: 0 },
+    merit: { bal: -10, earned: 'abc', spent: 1e99, items: { minc: 999, hack: 3, mtap: '2' } },
+    empire: { claimed: 1e9 }, lifetimeEarned: 1000,
+    weekly: { week: 'x', list: [{ id: 'w_earn', target: -5 }, { id: 'evil' }], bonus: 'yes' },
+    race: { week: 3000, start: -9, base: 'x', pending: { rank: 99, score: -1 }, best: 0 },
+    nwHist: [{ t: 1, v: 5 }, { t: 'a', v: 1 }, { t: 2, v: -3 }, 7, { t: 9e15, v: 1e301 }],
+    lux: { x1: true }
+  };
+  G.importSave(S.encode(evil));
+  const s = G.s;
+  assert.equal(s.biz.suco.up, 3);
+  assert.equal(s.biz.suco.runs, 0);
+  assert.equal(s.biz.suco.earned, 0);
+  assert.equal(s.biz.suco.wages, 0);
+  assert.equal(s.biz.burger.up, 0, 'sem nível, sem melhorias');
+  assert.deepEqual(s.reno, {}, 'reforma sem imóvel é descartada');
+  assert.equal(s.merit.bal, 0);
+  assert.equal(s.merit.items.minc, 10);
+  assert.equal(s.merit.items.mtap, 2);
+  assert.equal(s.merit.items.hack, undefined);
+  assert.equal(s.empire.claimed, E.empireLevel(s));
+  assert.equal(s.weekly.list.length, 1);
+  assert.equal(s.weekly.list[0].target, 1);
+  assert.equal(s.race.base, 5000);
+  assert.equal(s.race.pending.rank, D.RACE_BOTS.length + 1);
+  assert.equal(s.race.best, 1);
+  assert.equal(s.nwHist.length, 2);
+  assert.ok(s.nwHist.every((x) => x.v >= 0 && x.v <= S.BIG && x.t <= clock));
+  assert.equal(s.lux.x1, true, 'exclusivo possuído é mantido (validado como booleano)');
+});
+
+test('backups rotativos: 3 automáticos + diário; recuperação usa o mais recente válido', () => {
+  const s = fresh({ cash: 1 });
+  const st = G.storage;
+  for (let i = 1; i <= 4; i++) { s.cash = i; clock += 6 * 60000; G.save(); }
+  assert.equal(JSON.parse(st.getItem(G.KEYS.auto)).cash, 4);
+  assert.equal(JSON.parse(st.getItem(G.KEYS.auto2)).cash, 3);
+  assert.equal(JSON.parse(st.getItem(G.KEYS.auto3)).cash, 2);
+  assert.ok(st.getItem(G.KEYS.day));
+  st.setItem(D.SAVE_KEY, 'corrompido');
+  st.setItem(G.KEYS.auto, '{quebrado');
+  const r = G.load();
+  assert.equal(r.status, 'recovered');
+  assert.equal(r.from, 'auto2');
+  assert.equal(G.s.cash, 3);
+  const info = G.backupInfo();
+  assert.ok(info.auto3 && info.day && info.bad);
+});
+
+test('histórico do patrimônio: 1 ponto por minuto, no máximo 120', () => {
+  const s = fresh({ cash: 1e6 });
+  advance(61 * 3, 1);
+  assert.ok(s.nwHist.length >= 2 && s.nwHist.length <= 4);
+  for (let i = 0; i < 300; i++) G.sampleNetWorth(clock + i);
+  assert.equal(s.nwHist.length, 120);
+});
+
+test('gerente usa o custo com descontos (Headhunter)', () => {
+  const s = fresh({ cash: 1e12 });
+  G.addMedals(1000, 't');
+  G.buyMerit('mmgr');
+  G.buyBiz('burger', 1);
+  const c0 = s.cash;
+  assert.equal(G.hireManager('burger'), true);
+  close(c0 - s.cash, D.BUSINESSES[1].mgr * 0.85);
+});

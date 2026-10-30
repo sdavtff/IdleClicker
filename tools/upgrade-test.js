@@ -64,18 +64,21 @@ const check = (n, ok, info) => { results.push(ok); console.log((ok ? 'PASS ' : '
   await page.waitForTimeout(500);
   const cur = await page.evaluate(() => {
     const s = G.s;
-    return { v: s.v, version: D.VERSION, cash: Math.round(s.cash), lifetime: Math.round(s.lifetimeEarned), jobs: s.jobs, suco: s.biz.suco.lvl, mgr: s.biz.suco.mgr,
+    return { v: s.v, saveVersion: D.SAVE_VERSION, version: D.VERSION, cash: Math.round(s.cash), lifetime: Math.round(s.lifetimeEarned), jobs: s.jobs, suco: s.biz.suco.lvl, mgr: s.biz.suco.mgr,
              emp: s.biz.suco.emp, burger: s.biz.burger.lvl, skills: JSON.stringify(s.skills), props: s.props.kitnet, lux: Object.keys(s.lux).sort().join(','),
-             nxs: s.hold.NXS && s.hold.NXS.qty, taps: s.stats.taps, unlocks: s.unlocks, daily: !!s.daily, bad: localStorage.getItem(G.KEYS.bad) };
+             nxs: s.hold.NXS && s.hold.NXS.qty, taps: s.stats.taps, unlocks: s.unlocks, daily: !!s.daily, bad: localStorage.getItem(G.KEYS.bad),
+             weekly: !!s.weekly, merit: s.merit.bal, empire: s.empire.claimed, empLvl: E.empireLevel(s), welcome: !!document.querySelector('.modal') && /Cifrópolis 2\.0/.test(document.querySelector('.modal').innerText) };
   });
   const pkgVersion = require(path.join(repo, 'package.json')).version;
-  check('Atualizado para o formato atual', cur.v === 2 && cur.version === pkgVersion, 'save v' + cur.v + ' / jogo ' + cur.version);
+  check('Atualizado para o formato atual', cur.v === cur.saveVersion && cur.version === pkgVersion, 'save v' + cur.v + ' / jogo ' + cur.version);
   for (const k of ['jobs', 'suco', 'mgr', 'emp', 'burger', 'skills', 'props', 'lux', 'nxs', 'taps']) check('Preservado: ' + k, cur[k] === oldInfo[k], oldInfo[k] + ' → ' + cur[k]);
   check('Dinheiro preservado (sem perdas)', cur.cash >= oldInfo.cash, oldInfo.cash + ' → ' + cur.cash);
   check('Faturamento total preservado', cur.lifetime >= oldInfo.lifetime);
   check('Jogador antigo mantém abas desbloqueadas', cur.unlocks.inv && cur.unlocks.lux);
   check('Missões diárias criadas para o save antigo', cur.daily);
   check('Nenhum save marcado como corrompido', cur.bad === null);
+  check('v2.0: desafios semanais criados e nível do império marcado sem enxurrada', cur.weekly && cur.empire === cur.empLvl);
+  check('v2.0: presente de medalhas e tela de boas-vindas da 2.0', cur.merit > 0 && cur.welcome, 'medalhas=' + cur.merit);
   check('Sem erros de JS na atualização', errors.length === 0, errors.join(' | '));
   await browser.close();
   server.close();

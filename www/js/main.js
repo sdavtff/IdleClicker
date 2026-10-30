@@ -12,8 +12,14 @@
   }
   G.storage = storage;
 
+  var saveTimer = null;
   var Game = {
-    save: function () { return G.save(); }
+    save: function () { return G.save(); },
+    // salva logo após compras/resgates (agrupando em 1,5 s) para não perder progresso se o app for fechado
+    saveSoon: function () {
+      if (saveTimer) return;
+      saveTimer = setTimeout(function () { saveTimer = null; G.save(); }, 1500);
+    }
   };
   root.Game = Game;
 
@@ -36,6 +42,21 @@
         Game._col = col;
       } else if (e.kind === 'job') {
         UI.toast('💼 Novo cargo: <b>' + D.JOBS[G.s.jobs - 1].name + '</b>', 'good');
+      } else if (e.kind === 'upg') {
+        root.Sfx.big();
+        var u = D.BIZ_UPGRADES.filter(function (x) { return x.id === e.upg; })[0];
+        UI.toast(u.icon + ' <b>' + u.name + '</b> em ' + root.E.BIZ[e.id].name + ': ' + u.desc + '!', 'good');
+        var card = UI.bizCard(e.id);
+        if (card) { card.el.classList.remove('levelup'); void card.el.offsetWidth; card.el.classList.add('levelup'); }
+      } else if (e.kind === 'reno') {
+        UI.toast('🔨 Reforma concluída: <b>' + root.E.PROP[e.id].name + '</b> (+20% de aluguel)', 'good');
+      } else if (e.kind === 'merit') {
+        root.Sfx.big();
+        UI.toast(root.E.MERIT[e.id].icon + ' <b>' + root.E.MERIT[e.id].name + '</b> melhorado!', 'good');
+      }
+      if (e.kind === 'biz' && (e.first || e.milestone)) {
+        var c2 = UI.bizCard(e.id);
+        if (c2) { c2.el.classList.remove('levelup'); void c2.el.offsetWidth; c2.el.classList.add('levelup'); }
       }
     });
     // várias metas concluídas em sequência viram um único aviso com o total (evita enxurrada de toasts)
@@ -72,6 +93,23 @@
       UI.toast('🔓 Nova área desbloqueada: <b>' + names[k] + '</b>!', 'good', function () { UI.go(k); }, 5000);
       var b = UI.tabButton(k);
       if (b) { b.classList.remove('unlock-pop'); void b.offsetWidth; b.classList.add('unlock-pop'); }
+    });
+    G.on('empireUp', function (e) {
+      root.Sfx.big();
+      UI.toast('🏛️ Império nível <b>' + e.lvl + '</b>! +' + e.medals + ' 🎖️', 'good', function () { UI.profile(); }, 4000);
+    });
+    // medalhas de outras fontes chegam agrupadas num aviso discreto
+    var medalBatch = null;
+    G.on('medals', function (m) {
+      if (/império|Desafio|Semana|Corrida|Torneio/.test(m.reason)) return; // essas já têm aviso próprio
+      if (!medalBatch) {
+        medalBatch = { n: 0 };
+        setTimeout(function () { var n = medalBatch.n; medalBatch = null; UI.toast('🎖️ +' + n + ' Medalha(s) de Mérito', 'info', function () { UI.luxTab = 'merit'; UI.go('lux'); }, 2500); }, 900);
+      }
+      medalBatch.n += m.n;
+    });
+    G.on('raceEnd', function (p) {
+      UI.toast('🏁 A Corrida Empresarial terminou! Você ficou em #' + p.rank + '. Toque para resgatar.', 'good', function () { UI.moreTab = 'tour'; UI.tourKind = 'race'; UI.go('more'); }, 6000);
     });
     G.on('saveError', function () {
       UI.toast('⚠️ Não foi possível salvar no aparelho (armazenamento cheio ou bloqueado). Exporte seu save em Mais › Ajustes.', 'bad', null, 7000);
@@ -164,6 +202,16 @@
     G.ensureDaily(Date.now());
     if (res.status === 'ok' || res.status === 'recovered') offlineCheck();
     loadNotice(res);
+    if (G.s.upgradeGift !== undefined) {
+      var gift = G.s.upgradeGift;
+      delete G.s.upgradeGift;
+      UI.modal({ icon: '🎉', title: 'Bem-vindo(a) à Cifrópolis 2.0!', html:
+        '<p>Seu progresso foi preservado. Novidades:</p><div class="kv left">' +
+        '<span>🏨 4 novos setores de empresas</span><b>fim de jogo</b><span>⬆️ Melhorias e eficiência por empresa</span><b>Negócios</b>' +
+        '<span>💹 Dividendos, reformas e novos ativos</span><b>Investir</b><span>🎖️ Medalhas e Loja de Mérito</span><b>Luxo</b>' +
+        '<span>📆 Desafios semanais e 2º torneio</span><b>Início / Mais</b><span>🎩 Patentes de Legado</span><b>Mais › Legado</b></div>' +
+        (gift > 0 ? '<p>Presente de atualização: <b>+' + gift + ' 🎖️ Medalhas de Mérito</b> pelas suas conquistas e nível do império.</p>' : '') });
+    }
     if (G.s.tour.pending) setTimeout(function () { UI.toast('🏆 Prêmio do torneio esperando por você!', 'good', function () { UI.moreTab = 'tour'; UI.go('more'); }, 6000); }, 1500);
     G.touch(Date.now());
     // não sobrescreve o save principal ilegível antes de guardar a cópia (G.load já guardou em KEYS.bad)

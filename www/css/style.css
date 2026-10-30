@@ -384,3 +384,154 @@ button.toggle:last-child { border-bottom: 0; }
 .switch { flex: 0 0 auto; }
 #toasts { top: calc(var(--hud-h, 120px) + 6px); }
 .title.wrap { white-space: normal; }
+
+/* =====================================================================
+   v2.0 — identidade visual renovada (mantém a paleta original de Cifrópolis)
+   ===================================================================== */
+:root {
+  --surface: linear-gradient(180deg, #3a2774 0%, #2b1c5a 100%);
+  --surface-flat: #2b1c5a;
+  --stroke: rgba(255, 255, 255, 0.09);
+  --stroke-hi: rgba(255, 255, 255, 0.16);
+  --shadow: 0 10px 28px rgba(7, 2, 22, 0.45);
+  --ease: cubic-bezier(.2, .8, .2, 1);
+}
+body { font-feature-settings: 'tnum' 1; }
+#app { background: radial-gradient(130% 55% at 50% -5%, #4a26a0 0%, #26135a 42%, #140b2b 100%); }
+
+/* cartões com brilho superior sutil */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--stroke);
+  box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  border-radius: 18px;
+}
+h2 { font-size: 12px; letter-spacing: 1.2px; color: #c9bff0; margin: 18px 4px 8px; }
+
+/* HUD */
+#hud { background: linear-gradient(180deg, rgba(20, 11, 43, 0.97), rgba(26, 14, 56, 0.88)); backdrop-filter: blur(10px); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25); }
+#cash { font-size: 32px; text-shadow: 0 2px 18px rgba(255, 190, 40, 0.25); }
+.chip.profile { display: inline-flex; gap: 8px; align-items: center; padding: 7px 11px; background: rgba(255, 255, 255, 0.09); border: 1px solid var(--stroke-hi); color: var(--text); min-height: 44px; }
+.chip.profile span { white-space: nowrap; }
+.chip.profile:active { transform: scale(0.96); }
+.emp-bar { height: 3px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); margin-top: 6px; overflow: hidden; }
+.emp-bar > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #8a63ff, var(--gold)); transition: width 0.4s var(--ease); }
+
+/* barra de abas: ícones SVG + indicador */
+#tabbar { background: rgba(14, 7, 32, 0.97); box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35); }
+#tabbar button .ti { width: 26px; height: 26px; display: grid; place-items: center; font-size: 0; }
+#tabbar button .ti svg { width: 24px; height: 24px; transition: transform 0.2s var(--ease); }
+#tabbar button.on .ti svg { transform: translateY(-2px) scale(1.08); filter: drop-shadow(0 2px 8px rgba(255, 201, 60, 0.45)); }
+#tabbar button::before {
+  content: ''; position: absolute; top: 0; left: 50%; width: 0; height: 3px; border-radius: 0 0 4px 4px;
+  background: linear-gradient(90deg, var(--gold2), var(--gold)); transform: translateX(-50%); transition: width 0.25s var(--ease);
+}
+#tabbar button.on::before { width: 34px; }
+#tabbar button.locked .ti::after { content: '🔒'; font-size: 10px; position: absolute; top: 6px; right: calc(50% - 22px); margin: 0; }
+
+/* transições direcionais entre abas */
+#screens[data-dir="fwd"] .screen.active { animation: slideFwd 0.26s var(--ease); }
+#screens[data-dir="back"] .screen.active { animation: slideBack 0.26s var(--ease); }
+@keyframes slideFwd { from { opacity: 0; transform: translateX(22px); } }
+@keyframes slideBack { from { opacity: 0; transform: translateX(-22px); } }
+
+/* botões: resposta tátil e "comprado" */
+.btn { transition: transform 0.08s, filter 0.2s, box-shadow 0.08s; }
+.btn.bought { animation: bought 0.42s var(--ease); }
+@keyframes bought { 30% { transform: scale(1.08); filter: brightness(1.25); } }
+.btn.merit { background: linear-gradient(180deg, #c7a6ff, #8a5cf6); color: #fff; box-shadow: 0 3px 0 #5a35b8; }
+
+/* partículas */
+.burst-ring { position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; border: 3px solid var(--gold); animation: ring 0.5s ease-out forwards; pointer-events: none; }
+.burst-ring.big { border-color: var(--mint); animation-duration: 0.8s; }
+@keyframes ring { to { transform: scale(5); opacity: 0; } }
+.spark { position: absolute; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; border-radius: 2px; animation: spark 0.65s cubic-bezier(.15,.75,.35,1) forwards; pointer-events: none; }
+@keyframes spark { to { transform: translate(var(--dx), var(--dy)) rotate(200deg) scale(0.3); opacity: 0; } }
+
+/* resumo (grade de números) */
+.sum-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; }
+.sum-k { font-size: 10.5px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; color: var(--muted); }
+.sum-v { font-size: 16px; font-weight: 900; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.portfolio, .biz-summary { padding: 12px 10px; }
+
+/* banner e pílula do evento de setor */
+.sector-banner { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 10px 12px; margin-bottom: 8px; border-radius: 14px;
+  background: linear-gradient(90deg, rgba(255, 79, 154, 0.22), rgba(255, 201, 60, 0.18)); border: 1px solid rgba(255, 201, 60, 0.35); color: var(--text); font-size: 13px; min-height: 48px; }
+.sector-banner small { color: #f2dcae; font-size: 11.5px; }
+.sb-ico { font-size: 24px; }
+.sb-go { font-size: 22px; color: var(--gold); }
+.sector-pill { margin-top: 10px; font-size: 12px; color: #f2dcae; background: rgba(255, 201, 60, 0.1); border: 1px solid rgba(255, 201, 60, 0.25); border-radius: 10px; padding: 6px 9px; }
+
+/* cartão de empresa */
+.card.biz { position: relative; overflow: hidden; padding-left: 15px; }
+.card.biz::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--biz, var(--gold)); opacity: 0.9; }
+.biz .biz-ico { border: 0; color: inherit; font-size: 30px; }
+.biz .biz-ico.tapped { animation: tapPop 0.25s var(--ease); }
+@keyframes tapPop { 50% { transform: scale(0.9); } }
+.biz-tags { display: flex; flex-wrap: wrap; gap: 4px; margin: 3px 0 2px; }
+.tag { font-size: 10.5px; font-weight: 800; padding: 2px 7px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); color: #e7e0ff; white-space: nowrap; }
+.tag[style*="--c"] { background: color-mix(in srgb, var(--c) 22%, transparent); }
+.tag.hot { background: rgba(255, 120, 60, 0.22); color: #ffc3a0; }
+.tag.eff { background: rgba(76, 201, 240, 0.18); color: #a9e9ff; }
+.tag.upg { background: rgba(46, 230, 168, 0.18); color: #9ff5d4; }
+.tag.div { background: rgba(179, 136, 255, 0.2); color: #dcc8ff; margin-left: 6px; }
+.row-sub { display: flex; align-items: center; flex-wrap: wrap; }
+.ms-bar { height: 4px; border-radius: 4px; background: rgba(255, 255, 255, 0.08); margin-top: 6px; overflow: hidden; }
+.ms-bar > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #8a63ff, #c9a2ff); transition: width 0.3s var(--ease); }
+.info-btn { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 12px; background: rgba(255, 255, 255, 0.07); color: #d9d0ff; display: grid; place-items: center; }
+.info-btn svg { width: 20px; height: 20px; }
+.info-btn:active { transform: scale(0.94); }
+.upg-pill { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 42px; margin-top: 8px; padding: 8px 12px; border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06); border: 1px dashed rgba(255, 255, 255, 0.18); color: #e8e1ff; font-size: 12.5px; font-weight: 700; text-align: left; }
+.upg-pill span { color: var(--gold); font-size: 18px; }
+.upg-pill.ready { border-style: solid; border-color: rgba(46, 230, 168, 0.6); background: rgba(46, 230, 168, 0.12); color: #c8fbe6; animation: readyGlow 1.6s ease-in-out infinite; }
+.upg-pill.done { border-style: solid; color: var(--mint); }
+@keyframes readyGlow { 50% { box-shadow: 0 0 0 4px rgba(46, 230, 168, 0.12); } }
+.card.levelup { animation: levelUp 0.9s var(--ease); }
+@keyframes levelUp { 20% { box-shadow: 0 0 0 3px var(--gold), 0 0 34px rgba(255, 201, 60, 0.55); transform: scale(1.015); } }
+
+/* detalhe da empresa */
+.biz-detail { text-align: left; }
+.mult-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.mult-chips span { font-size: 11px; padding: 4px 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.06); color: var(--muted); }
+.mult-chips span.on { background: rgba(46, 230, 168, 0.14); color: #c8fbe6; }
+.upg-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.upg-row.got { opacity: 0.75; }
+.upg-row .ico { width: 42px; height: 42px; font-size: 22px; }
+
+/* finanças */
+.mix-row { display: flex; justify-content: space-between; font-size: 13px; margin-top: 8px; }
+.bar.mix { height: 8px; margin-top: 4px; }
+.rank-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); opacity: 0.6; }
+.rank-row.got { opacity: 1; }
+.rank-row:last-child { border-bottom: 0; }
+.rk-ico { font-size: 24px; width: 32px; text-align: center; }
+
+/* mérito */
+.merit-hero .v { color: #d6c2ff; }
+.pips { display: flex; gap: 4px; margin-top: 5px; }
+.pips i { width: 14px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); }
+.pips i.on { background: linear-gradient(90deg, #c7a6ff, #8a5cf6); }
+.lux.exclusive { border-color: rgba(199, 166, 255, 0.45); }
+
+/* perfil */
+.profile-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 6px 0 10px; }
+.profile-grid .sum-v { font-size: 15px; white-space: normal; }
+
+/* segmentado compacto (dentro de cartões) */
+.seg.seg-mini { margin-bottom: 8px; }
+.seg.seg-mini button { min-height: 40px; font-size: 12.5px; }
+
+/* telas pequenas */
+@media (max-width: 350px) {
+  .chip.profile { gap: 5px; padding: 6px 8px; font-size: 11px; }
+  .sum-v { font-size: 14px; }
+  #cash { font-size: 28px; }
+}
+
+/* reduzir animações também nos efeitos novos */
+body.reduce-motion .burst-ring, body.reduce-motion .spark { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  #screens .screen.active { animation: none !important; }
+  .upg-pill.ready, .card.levelup { animation: none; }
+}

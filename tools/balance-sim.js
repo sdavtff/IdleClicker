@@ -8,6 +8,7 @@ const js = (f) => path.join(__dirname, '..', 'www', 'js', f);
 const D = require(js('data.js'));
 const E = require(js('economy.js'));
 const G = require(js('game.js'));
+require(js('meta.js'));
 const F = require(js('fmt.js'));
 
 const MINUTES = +process.argv[2] || 120;
@@ -70,10 +71,21 @@ function bestOption() {
       if (g > 0) opts.push({ cost: E.empCost(s, b.id), gain: g, go: () => G.hireEmployee(b.id) });
     }
   });
-  // imóveis
-  D.PROPS.forEach(p => opts.push({ cost: E.propCost(s, p.id), gain: p.rent * (1 - D.PROP_UPKEEP) * E.starMult(s), go: () => G.buyProp(p.id) }));
+  // melhorias de empresa (v2.0)
+  D.BUSINESSES.forEach(b => {
+    const info = G.upgradeInfo(b.id);
+    if (!info || info.done || info.locked) return;
+    const up = s.biz[b.id].mgr ? 1 : manualUptime(b.id);
+    const inc = E.bizIncome(s, b.id, now) * up;
+    const u = info.def;
+    const gain = u.mult ? inc * (u.mult - 1) : inc * (u.speed - 1);
+    opts.push({ cost: info.cost, gain: Math.max(gain, 1e-9), go: () => G.buyUpgrade(b.id) });
+  });
+  // imóveis e reformas
+  D.PROPS.forEach(p => opts.push({ cost: E.propCost(s, p.id), gain: E.propRent(s, p.id) * (1 - D.PROP_UPKEEP), go: () => G.buyProp(p.id) }));
+  D.PROPS.forEach(p => { const n = s.props[p.id] || 0; if (n && E.renoLvl(s, p.id) < D.RENO_MAX) opts.push({ cost: E.renoCost(s, p.id), gain: n * p.rent * D.RENO_BONUS * E.starMult(s) * (1 - D.PROP_UPKEEP), go: () => G.renovate(p.id) }); });
   // luxo com bônus de renda
-  D.LUXURY.forEach(l => { if (!s.lux[l.id] && l.bonus.inc) opts.push({ cost: l.cost, gain: bizInc * l.bonus.inc, go: () => G.buyLux(l.id) }); });
+  D.LUXURY.forEach(l => { if (!s.lux[l.id] && !l.merit && l.bonus.inc) opts.push({ cost: l.cost, gain: bizInc * l.bonus.inc, go: () => G.buyLux(l.id) }); });
   opts.forEach(o => { o.payback = o.cost / o.gain; });
   opts.sort((a, b) => a.payback - b.payback);
   return opts[0];
@@ -100,8 +112,11 @@ for (let t = 1; t <= totalSec; t++) {
   D.PROPS.forEach(p => { if (s.props[p.id]) note('prop' + p.id, 'Imóvel ' + p.name, t); });
   D.LUXURY.forEach(l => { if (s.lux[l.id]) note('lux' + l.id, 'Luxo ' + l.name, t); });
   if (E.potentialStars(s) >= 1) note('star', 'Prestígio disponível (1ª estrela)', t);
-  // resgata missões diárias concluídas (como um jogador faria)
+  // resgata missões, desafios e gasta medalhas (como um jogador faria)
   if (s.daily) { s.daily.list.forEach((m, i) => G.claimDaily(i)); G.claimDailyBonus(); }
+  if (s.weekly) { s.weekly.list.forEach((m, i) => G.claimWeekly(i)); G.claimWeeklyBonus(); }
+  ['minc', 'mtap', 'mstart', 'moff', 'mmgr', 'mquick'].forEach(id => G.buyMerit(id));
+  D.LUXURY.forEach(l => { if (l.merit) G.buyMeritLux(l.id); });
   if (PRESTIGE && E.potentialStars(s) >= Math.max(5, s.stars)) {
     const g = G.prestige();
     s = G.s;

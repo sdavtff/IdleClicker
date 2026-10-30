@@ -74,31 +74,39 @@
     };
   }
 
-  // Rivais simulados (offline): pontuação cresce ao longo da semana proporcional ao patrimônio do jogador no início.
-  M.bots = function (s, now, final) {
-    var w = s.tour.week;
-    var r = seeded(w * 7919 + 17);
-    var start = M.weekStart(w), end = M.weekEnd(w);
+  // Rivais simulados (offline e determinísticos por semana). Não são jogadores reais: a interface os marca com 🤖.
+  // final_i = base × habilidade_i (0,15–1,75); ao longo da semana a pontuação cresce como progresso^forma_i.
+  M.botsFor = function (names, salt, base, week, now, final) {
+    var r = seeded(week * 7919 + salt);
+    var start = M.weekStart(week), end = M.weekEnd(week);
     var prog = final ? 1 : Math.min(1, Math.max(0, (now - start) / (end - start)));
-    return D.TOUR_BOTS.map(function (name) {
+    return names.map(function (name) {
       var skill = 0.15 + r() * 1.6;
       var shape = 0.6 + r() * 0.8;
-      return { name: name, score: Math.floor(s.tour.base * skill * Math.pow(prog, shape)), bot: true };
+      return { name: name, score: Math.floor(base * skill * Math.pow(prog, shape)), bot: true };
     });
   };
+  M.bots = function (s, now, final) { return M.botsFor(D.TOUR_BOTS, 17, s.tour.base, s.tour.week, now, final); };
 
-  M.ranking = function (s, now, final) {
-    var list = M.bots(s, now, final);
-    list.push({ name: 'Você', score: Math.floor(s.tour.score), me: true });
+  function rank(list, me) {
+    list.push({ name: 'Você', score: Math.floor(me), me: true });
     list.sort(function (a, b) { return b.score - a.score; });
     return list;
+  }
+  // Corrida Empresarial: pontuação = faturamento produtivo na semana
+  M.raceRanking = function (s, now, final) {
+    return rank(M.botsFor(D.RACE_BOTS, 911, s.race.base, s.race.week, now, final), M.raceScore(s));
   };
+  M.raceScore = function (s) { return Math.max(0, s.stats.prodEarned - s.race.start); };
 
+  M.ranking = function (s, now, final) { return rank(M.bots(s, now, final), s.tour.score); };
+
+  // Prêmios por posição (iguais nos dois torneios, exceto o turbo, exclusivo do torneio da bolsa)
   M.rewardFor = function (rank) {
-    if (rank === 1) return { min: 30, boostH: 2, label: '🥇 Campeão' };
-    if (rank <= 3) return { min: 20, boostH: 1, label: '🥈 Pódio' };
-    if (rank <= 5) return { min: 10, boostH: 0.5, label: '🏅 Top 5' };
-    return { min: 3, boostH: 0, label: '🎗️ Participação' };
+    if (rank === 1) return { min: 30, boostH: 2, medals: 25, label: '🥇 Campeão' };
+    if (rank <= 3) return { min: 20, boostH: 1, medals: 15, label: '🥈 Pódio' };
+    if (rank <= 5) return { min: 10, boostH: 0.5, medals: 8, label: '🏅 Top 5' };
+    return { min: 3, boostH: 0, medals: 2, label: '🎗️ Participação' };
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = M;

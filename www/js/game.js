@@ -24,6 +24,9 @@
   G.KEYS = {
     main: D.SAVE_KEY,
     auto: D.SAVE_KEY + '_auto',        // último save bom (rotativo, a cada 5 min)
+    auto2: D.SAVE_KEY + '_auto2',      // backup automático anterior (≈ 10 min atrás)
+    auto3: D.SAVE_KEY + '_auto3',      // backup automático mais antigo (≈ 15 min atrás)
+    day: D.SAVE_KEY + '_daily',        // primeiro save de cada dia
     pre: D.SAVE_KEY + '_preimport',    // estado anterior a uma importação/restauração
     bad: D.SAVE_KEY + '_corrupt'       // cópia intacta de um save que não pôde ser lido
   };
@@ -44,19 +47,30 @@
       ach: {},
       daily: null,
       unlocks: { inv: false, lux: false },
+      // v2.0
+      reno: {},
+      merit: { bal: 0, earned: 0, spent: 0, items: {} },
+      empire: { claimed: 0 },
+      weekly: null,
+      race: { week: null, start: 0, base: 5000, pending: null, best: null },
+      nwHist: [],
       stats: {
         taps: 0, tapEarned: 0, bizRuns: 0, trades: 0, tradeProfit: 0, fees: 0, playSec: 0, adsWatched: 0,
-        bizLevels: 0, skillsBought: 0, propsBought: 0, eventsFixed: 0, dailyDone: 0, offlineEarned: 0, bonusUsed: 0, prodEarned: 0, wagesPaid: 0, rentUpkeepPaid: 0
+        bizLevels: 0, skillsBought: 0, propsBought: 0, eventsFixed: 0, dailyDone: 0, offlineEarned: 0, bonusUsed: 0, prodEarned: 0, wagesPaid: 0, rentUpkeepPaid: 0,
+        manualRuns: 0, empHired: 0, upgBought: 0, renoDone: 0, divEarned: 0, goalsDone: 0, weeklyDone: 0, meritEarned: 0, racesWon: 0
       },
       settings: { sound: true, vib: true, reduceMotion: false, bigText: false },
       noAds: false,
       tutorial: 0,
       created: now, lastSeen: now, clockMax: now
     };
-    D.BUSINESSES.forEach(function (b) { s.biz[b.id] = { lvl: 0, emp: 0, mgr: false, prog: 0, running: false }; });
+    D.BUSINESSES.forEach(function (b) { s.biz[b.id] = G.newBiz(); });
     M.init(s);
     return s;
   };
+
+  // up = melhorias compradas; runs/earned/wages = estatísticas da empresa (zeram no Legado, como os níveis)
+  G.newBiz = function () { return { lvl: 0, emp: 0, mgr: false, prog: 0, running: false, up: 0, runs: 0, earned: 0, wages: 0 }; };
 
   // ---------------- dinheiro (com guardas contra NaN/Infinity) ----------------
   // isReward: prêmios (metas, missões, baú, torneio, bônus) não contam como "faturamento produtivo",
@@ -134,7 +148,7 @@
 
   G.hireManager = function (id) {
     var s = G.s, st = s.biz[id];
-    if (!st || st.lvl <= 0 || st.mgr || !spend(E.BIZ[id].mgr)) return false;
+    if (!st || st.lvl <= 0 || st.mgr || !spend(E.mgrCost(s, id))) return false;
     st.mgr = true;
     emit('buy', { kind: 'mgr', id: id });
     return true;
@@ -144,6 +158,7 @@
     var s = G.s, st = s.biz[id];
     if (!st || st.lvl <= 0 || st.emp >= D.EMP_MAX || !spend(E.empCost(s, id))) return false;
     st.emp++;
+    s.stats.empHired++;
     emit('buy', { kind: 'emp', id: id });
     return true;
   };
@@ -153,6 +168,68 @@
     var st = G.s.biz[id];
     if (!st || st.lvl <= 0 || st.mgr || st.running) return false;
     st.running = true; st.prog = 0;
+    return true;
+  };
+
+  // Melhoria de empresa (sequencial): exige o nível mínimo e a melhoria anterior.
+  G.upgradeInfo = function (id) {
+    var s = G.s, st = s.biz[id];
+    if (!st) return null;
+    var i = st.up || 0, u = D.BIZ_UPGRADES[i];
+    if (!u) return { done: true };
+    return { i: i, def: u, cost: E.upgCost(s, id, i), locked: st.lvl < u.req, req: u.req };
+  };
+  G.buyUpgrade = function (id) {
+    var s = G.s, info = G.upgradeInfo(id);
+    if (!info || info.done || info.locked || !spend(info.cost)) return false;
+    s.biz[id].up = info.i + 1;
+    s.stats.upgBought++;
+    emit('buy', { kind: 'upg', id: id, upg: info.def.id });
+    return true;
+  };
+
+  // Reforma: por tipo de imóvel (precisa ter ao menos 1 unidade), até D.RENO_MAX.
+  G.renovate = function (id) {
+    var s = G.s;
+    if (!E.PROP[id] || !(s.props[id] > 0) || E.renoLvl(s, id) >= D.RENO_MAX) return false;
+    if (!spend(E.renoCost(s, id))) return false;
+    s.reno[id] = E.renoLvl(s, id) + 1;
+    s.stats.renoDone++;
+    emit('buy', { kind: 'reno', id: id });
+    return true;
+  };
+
+  // ---------------- Medalhas de Mérito (moeda ganha jogando; nunca vendida) ----------------
+  G.addMedals = function (n, reason) {
+    var s = G.s;
+    n = Math.floor(n);
+    if (!(n > 0)) return 0;
+    s.merit.bal = Math.min(1e9, s.merit.bal + n);
+    s.merit.earned = Math.min(1e9, s.merit.earned + n);
+    s.stats.meritEarned = s.merit.earned;
+    emit('medals', { n: n, reason: reason });
+    return n;
+  };
+  G.meritCost = function (id) {
+    var m = E.MERIT[id];
+    return Math.round(m.cost * Math.pow(m.growth, E.meritLvl(G.s, id)));
+  };
+  G.buyMerit = function (id) {
+    var s = G.s, m = E.MERIT[id];
+    if (!m || E.meritLvl(s, id) >= m.max) return false;
+    var c = G.meritCost(id);
+    if (s.merit.bal < c) return false;
+    s.merit.bal -= c; s.merit.spent += c;
+    s.merit.items[id] = E.meritLvl(s, id) + 1;
+    emit('buy', { kind: 'merit', id: id });
+    return true;
+  };
+  G.buyMeritLux = function (id) {
+    var s = G.s, l = E.LUX[id];
+    if (!l || !l.merit || s.lux[id] || s.merit.bal < l.merit) return false;
+    s.merit.bal -= l.merit; s.merit.spent += l.merit;
+    s.lux[id] = true;
+    emit('buy', { kind: 'lux', id: id });
     return true;
   };
 
@@ -167,7 +244,7 @@
 
   G.buyLux = function (id) {
     var s = G.s, l = E.LUX[id];
-    if (!l || s.lux[id] || !spend(l.cost)) return false;
+    if (!l || l.merit || s.lux[id] || !spend(l.cost)) return false; // exclusivos só com medalhas
     s.lux[id] = true;
     emit('buy', { kind: 'lux', id: id });
     return true;
@@ -292,6 +369,14 @@
       case 'daily': return s.stats.dailyDone;
       case 'tourwin': return s.tour.best === 1 ? 1 : 0;
       case 'stars': return s.stars;
+      case 'upg': return E.upgCount(s);
+      case 'reno': case 'renon': return D.PROPS.reduce(function (a, p) { return a + E.renoLvl(s, p.id); }, 0);
+      case 'effmax': return D.BUSINESSES.reduce(function (a, b) { return Math.max(a, E.effLevel(s, b.id)); }, 0);
+      case 'divs': return s.stats.divEarned;
+      case 'empire': return E.empireLevel(s);
+      case 'weekly': return s.stats.weeklyDone;
+      case 'racewin': return s.race.best === 1 ? 1 : 0;
+      case 'meritall': return s.merit.earned;
     }
     return 0;
   }
@@ -317,6 +402,7 @@
       reward = Math.max(reward, 10 * (i + 1));
       earn(reward, true);
       s.goals[kind]++;
+      s.stats.goalsDone++;
       emit('goal', { kind: kind, txt: gp.def.txt, reward: reward });
     });
   }
@@ -357,9 +443,11 @@
       case 'inv': return !!s.unlocks.inv;
       case 'props': return s.lifetimeEarned >= 2e4;
       case 'biz2': return E.ownedCount(s) >= 2;
+      case 'upg': return D.BUSINESSES.some(function (b) { var i = G.upgradeInfo(b.id); return i && !i.done && !i.locked; });
     }
     return true;
   }
+  G.dailyAvailable = dailyAvailable;
   function seededRng(seed) {
     var x = (seed >>> 0) || 1;
     return function () { x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0; return (x % 1e9) / 1e9; };
@@ -378,9 +466,17 @@
       case 'trades': return 4;
       case 'props': return 2;
       case 'fix': return 1;
+      case 'manual': return 40;
+      case 'emps': return 3;
+      case 'upgs': return 1;
+      case 'renos': return 1;
+      case 'divs': return round2(Math.max(100, E.dividendRate(s) * 1800 + income * 60));
+      case 'goals': return 3;
     }
     return 1;
   }
+  G.seededRng = seededRng;
+  G.round2 = round2;
 
   // Gera as missões do dia (determinístico pela data). Relógio atrasado não gera um novo dia.
   G.ensureDaily = function (now) {
@@ -459,7 +555,7 @@
 
   // ---------------- fluxo medido (últimos 60 s, só em memória) ----------------
   // Soma o que foi REALMENTE creditado/debitado em cada categoria, para o painel mostrar o valor medido.
-  var FLOW_KEYS = ['biz', 'manual', 'wages', 'salary', 'rent', 'rentUp'];
+  var FLOW_KEYS = ['biz', 'manual', 'wages', 'salary', 'rent', 'rentUp', 'div'];
   var flowCur = null, flowBuckets = [], flowAge = 0;
   function newBucket() { var b = { t: 0 }; FLOW_KEYS.forEach(function (k) { b[k] = 0; }); return b; }
   function flow(k, v) { if (!flowCur) flowCur = newBucket(); if (v > 0 && isFinite(v)) flowCur[k] += v; }
@@ -477,7 +573,7 @@
     if (tot.t < 5) return null;
     var out = { secs: tot.t };
     FLOW_KEYS.forEach(function (k) { out[k] = tot[k] / tot.t; });
-    out.net = out.biz + out.manual + out.salary + out.rent - out.wages - out.rentUp;
+    out.net = out.biz + out.manual + out.salary + out.rent + out.div - out.wages - out.rentUp;
     return out;
   };
 
@@ -501,6 +597,8 @@
         earn(amt);
         s.stats.wagesPaid = Math.min(S.BIG, s.stats.wagesPaid + wages);
         s.stats.bizRuns += n;
+        st.runs += n; st.earned = Math.min(S.BIG, st.earned + amt); st.wages = Math.min(S.BIG, st.wages + wages);
+        if (!st.mgr) s.stats.manualRuns++;
         flow(st.mgr ? 'biz' : 'manual', gross); flow('wages', wages);
         if (st.mgr) st.prog -= n; else { st.prog = 0; st.running = false; }
         emit('bizPay', { id: b.id, amount: amt });
@@ -511,6 +609,8 @@
     if (sal + rent - rentUp > 0) earn(sal + rent - rentUp);
     s.stats.rentUpkeepPaid = Math.min(S.BIG, s.stats.rentUpkeepPaid + rentUp);
     flow('salary', sal); flow('rent', rent); flow('rentUp', rentUp);
+    var div = E.dividendRate(s) * dt;
+    if (div > 0) { earn(div); s.stats.divEarned = Math.min(S.BIG, s.stats.divEarned + div); flow('div', div); }
     flowTick(dt);
 
     // eventos
@@ -543,6 +643,7 @@
       checkUnlocks();
       checkTournament(now);
       G.ensureDaily(now);
+      if (G.metaTick) G.metaTick(now, 0.25);
     }
   };
 
@@ -587,8 +688,9 @@
     var cash = Math.max(1000, (E.passiveIncome(s, now, true) + E.tapValue(s, now)) * rw.min * 60);
     reward(cash);
     if (rw.boostH > 0) s.boost.tourUntil = Math.max(now, s.boost.tourUntil) + rw.boostH * 3600000;
+    G.addMedals(rw.medals, 'Torneio da Bolsa');
     s.tour.pending = null;
-    return { cash: cash, boostH: rw.boostH, label: rw.label, rank: p.rank };
+    return { cash: cash, boostH: rw.boostH, medals: rw.medals, label: rw.label, rank: p.rank };
   };
 
   // ---------------- bônus (anúncio recompensado, ou gratuito quando não há anúncios) ----------------
@@ -652,11 +754,12 @@
     s.stats.offlineEarned = Math.min(S.BIG, s.stats.offlineEarned + amount);
     s.stats.wagesPaid = Math.min(S.BIG, s.stats.wagesPaid + b.empUpkeep * secs);
     s.stats.rentUpkeepPaid = Math.min(S.BIG, s.stats.rentUpkeepPaid + b.rentUpkeep * secs);
+    s.stats.divEarned = Math.min(S.BIG, s.stats.divEarned + b.div * secs);
     G.resetFlow();
     s.lastSeen = s.clockMax = now;
     return {
       elapsed: elapsed, secs: secs, capped: elapsed > cap, capH: cap / 3600, amount: amount, rate: rate,
-      parts: { biz: b.biz * secs, salary: b.salary * secs, rent: (b.rent - b.rentUpkeep) * secs, empUpkeep: b.empUpkeep * secs, manual: manual }
+      parts: { biz: b.biz * secs, salary: b.salary * secs, rent: (b.rent - b.rentUpkeep) * secs, div: b.div * secs, empUpkeep: b.empUpkeep * secs, manual: manual }
     };
   };
 
@@ -669,14 +772,26 @@
       lifetimeEarned: s.lifetimeEarned, lux: s.lux, mkt: s.mkt, tour: s.tour, goals: s.goals,
       stats: s.stats, settings: s.settings, noAds: s.noAds, tutorial: s.tutorial, created: s.created,
       boost: s.boost, news: s.news, ach: s.ach, daily: s.daily, unlocks: s.unlocks,
-      lastSeen: s.lastSeen, clockMax: s.clockMax
+      lastSeen: s.lastSeen, clockMax: s.clockMax,
+      merit: s.merit, empire: s.empire, weekly: s.weekly, race: s.race, nwHist: s.nwHist
     };
     var n = G.newState();
     Object.keys(keep).forEach(function (k) { n[k] = keep[k]; });
     G.s = n;
+    G.applyLegacyPerks(n);
     G.resetFlow();
+    G.addMedals(5 + Math.min(45, Math.floor(gain / 10)), 'Legado');
     emit('prestige', { gain: gain });
     return gain;
+  };
+
+  // Vantagens das patentes de Legado e do Fundo Fiduciário, aplicadas ao recomeçar.
+  G.applyLegacyPerks = function (n) {
+    var startCash = D.MERIT_START_CASH[E.meritLvl(n, 'mstart')] || 0;
+    if (E.hasRank(n, 'Herdeiro')) { n.jobs = Math.max(n.jobs, 1); startCash = Math.max(startCash, 1000); }
+    var kit = E.hasRank(n, 'Magnata Imperial') ? ['suco', 'burger', 'escola', 'pixel'] : E.hasRank(n, 'Barão') ? ['suco'] : [];
+    kit.forEach(function (id) { n.biz[id].lvl = Math.max(n.biz[id].lvl, 25); n.biz[id].mgr = true; });
+    n.cash = Math.max(n.cash, startCash);
   };
 
   // ---------------- save / load / backups ----------------
@@ -694,6 +809,17 @@
   }
 
   var lastBackup = 0;
+  // 3 backups automáticos em rodízio (≈ 5, 10 e 15 min) + o primeiro save de cada dia.
+  function rotateBackups(json, now) {
+    var a1 = read(G.KEYS.auto), a2 = read(G.KEYS.auto2);
+    if (a2) store(G.KEYS.auto3, a2);
+    if (a1) store(G.KEYS.auto2, a1);
+    store(G.KEYS.auto, json);
+    var d = read(G.KEYS.day), today = dayKey(now);
+    var dDay = 0;
+    if (d) { try { dDay = dayKey(JSON.parse(d).lastSeen || 0); } catch (e) { dDay = 0; } }
+    if (dDay !== today) store(G.KEYS.day, json);
+  }
   G.save = function () {
     if (!G.storage || !G.s) return false;
     G.touch();
@@ -701,7 +827,7 @@
     try { json = JSON.stringify(G.s); } catch (e) { return false; }
     var ok = store(G.KEYS.main, json);
     var now = G.now();
-    if (ok && now - lastBackup > BACKUP_EVERY_MS) { lastBackup = now; store(G.KEYS.auto, json); }
+    if (ok && now - lastBackup > BACKUP_EVERY_MS) { lastBackup = now; rotateBackups(json, now); }
     if (!ok && !G.saveFailed) emit('saveError');
     G.saveFailed = !ok;
     return ok;
@@ -715,13 +841,16 @@
       try {
         G.s = parseState(raw);
         lastBackup = G.now();
-        store(G.KEYS.auto, raw);
+        rotateBackups(raw, lastBackup);
         return { status: 'ok' };
       } catch (e) {
         if (read(G.KEYS.bad) !== raw) store(G.KEYS.bad, raw);
-        var bak = read(G.KEYS.auto);
-        if (bak && bak !== raw) {
-          try { G.s = parseState(bak); return { status: 'recovered', error: e.message }; } catch (e2) { /* backup também inválido */ }
+        // tenta os backups do mais recente ao mais antigo
+        var keys = ['auto', 'auto2', 'auto3', 'day'];
+        for (var i = 0; i < keys.length; i++) {
+          var bak = read(G.KEYS[keys[i]]);
+          if (!bak || bak === raw) continue;
+          try { G.s = parseState(bak); return { status: 'recovered', error: e.message, from: keys[i] }; } catch (e2) { /* backup também inválido */ }
         }
         G.s = G.newState();
         return { status: 'failed', error: e.message };
@@ -757,7 +886,7 @@
   // Informações dos backups locais disponíveis para a tela de ajustes.
   G.backupInfo = function () {
     var out = {};
-    ['auto', 'pre', 'bad'].forEach(function (k) {
+    ['auto', 'auto2', 'auto3', 'day', 'pre', 'bad'].forEach(function (k) {
       var raw = read(G.KEYS[k]);
       if (!raw) return;
       var info = { size: raw.length, valid: false, time: 0, cash: 0 };

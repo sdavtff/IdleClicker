@@ -10,6 +10,7 @@ const E = require(js('economy.js'));
 const M = require(js('market.js'));
 const S = require(js('save.js'));
 const G = require(js('game.js'));
+require(js('meta.js'));
 
 // ---------- ambiente controlado ----------
 let clock;
@@ -297,9 +298,10 @@ test('Legado: concede estrelas, zera a partida e mantém luxo e conquistas', () 
   assert.equal(G.prestige(), 10);
   const n = G.s;
   assert.equal(n.stars, 10);
-  assert.equal(n.cash, 0);
+  // 10 estrelas = patente Herdeiro: recomeça com $1 K e o emprego Panfleteiro
+  assert.equal(n.cash, 1000);
   assert.equal(n.biz.suco.lvl, 0);
-  assert.equal(n.jobs, 0);
+  assert.equal(n.jobs, 1);
   assert.equal(n.lux.w1, true);
   assert.equal(n.ach.tap100, true);
   assert.equal(E.potentialStars(n), 0);

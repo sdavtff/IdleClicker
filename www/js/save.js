@@ -37,7 +37,10 @@
    * v1 → v2: surgem clockMax, conquistas, missões diárias e novas opções de acessibilidade
    * (todos com padrão seguro no sanitize, então nada precisa ser convertido). */
   var MIGRATIONS = {
-    1: function (raw) { return raw; }
+    1: function (raw) { return raw; },
+    // v2 → v3 (2.0.0): novas empresas, melhorias, reformas, mérito, império, desafios e corrida —
+    // tudo com padrão seguro no sanitize; o presente de atualização é calculado lá (fromVersion < 3).
+    2: function (raw) { return raw; }
   };
 
   S.migrate = function (raw, v) {
@@ -56,7 +59,8 @@
     if (!isObj(raw.biz)) throw new Error('O save não contém dados de negócios.');
     var v = int(raw.v, 1, 0, 1e9);
     if (v > D.SAVE_VERSION) throw new Error('Este save é de uma versão mais nova do jogo (v' + v + ').');
-    raw = S.migrate(raw, Math.max(1, v));
+    var fromVersion = Math.max(1, v);
+    raw = S.migrate(raw, fromVersion);
     var s = fresh;
 
     s.cash = num(raw.cash, 0, 0, BIG);
@@ -77,7 +81,11 @@
         emp: lvl > 0 ? int(o.emp, 0, 0, D.EMP_MAX) : 0,
         mgr: lvl > 0 && bool(o.mgr, false),
         prog: num(o.prog, 0, 0, 0.999),
-        running: lvl > 0 && bool(o.running, false)
+        running: lvl > 0 && bool(o.running, false),
+        up: lvl > 0 ? int(o.up, 0, 0, D.BIZ_UPGRADES.length) : 0,
+        runs: num(o.runs, 0, 0, BIG),
+        earned: num(o.earned, 0, 0, BIG),
+        wages: num(o.wages, 0, 0, BIG)
       };
     });
     s.jobs = int(raw.jobs, 0, 0, D.JOBS.length);
@@ -165,6 +173,46 @@
     Object.keys(D.UNLOCKS).forEach(function (k) {
       s.unlocks[k] = get(raw.unlocks, k) === true || s.lifetimeEarned >= D.UNLOCKS[k] || s.prestiges > 0;
     });
+    // ----- v2.0 -----
+    D.PROPS.forEach(function (p) {
+      var r = int(get(raw.reno, p.id), 0, 0, D.RENO_MAX);
+      if (r > 0 && s.props[p.id] > 0) s.reno[p.id] = r;
+    });
+    var mr = raw.merit;
+    s.merit = {
+      bal: int(get(mr, 'bal'), 0, 0, 1e9),
+      earned: int(get(mr, 'earned'), 0, 0, 1e9),
+      spent: int(get(mr, 'spent'), 0, 0, 1e9),
+      items: {}
+    };
+    D.MERIT_SHOP.forEach(function (m) {
+      var l = int(get(get(mr, 'items'), m.id), 0, 0, m.max);
+      if (l > 0) s.merit.items[m.id] = l;
+    });
+    s.merit.earned = Math.max(s.merit.earned, s.merit.bal);
+    var empLvl = s.lifetimeEarned >= 10 ? Math.floor(Math.log10(s.lifetimeEarned) / D.EMPIRE_STEP) : 0;
+    s.empire = { claimed: int(get(raw.empire, 'claimed'), empLvl, 0, empLvl) };
+    var wk = raw.weekly;
+    if (isObj(wk) && Array.isArray(wk.list)) {
+      var wlist = wk.list.slice(0, 3).filter(function (m) { return isObj(m) && D.WEEKLY_BY_ID[m.id]; }).map(function (m) {
+        return { id: m.id, target: num(m.target, 1, 1, BIG), base: num(m.base, 0, -BIG, BIG), claimed: bool(m.claimed, false), reward: num(m.reward, 0, 0, BIG) };
+      });
+      if (wlist.length) s.weekly = { week: int(wk.week, 0, 0, 1e7), list: wlist, bonus: bool(wk.bonus, false) };
+    }
+    var rc = raw.race;
+    s.race = {
+      week: has(rc, 'week') && rc.week !== null ? int(rc.week, null, 0, 1e7) : null,
+      start: num(get(rc, 'start'), 0, 0, BIG),
+      base: num(get(rc, 'base'), 5000, 5000, BIG),
+      pending: null,
+      best: has(rc, 'best') && rc.best !== null ? int(rc.best, null, 1, D.RACE_BOTS.length + 1) : null
+    };
+    var rp = get(rc, 'pending');
+    if (isObj(rp)) s.race.pending = { rank: int(rp.rank, 10, 1, D.RACE_BOTS.length + 1), week: int(rp.week, 0, 0, 1e7), score: num(rp.score, 0, 0, BIG) };
+    s.nwHist = (Array.isArray(raw.nwHist) ? raw.nwHist : []).slice(-120).filter(function (x) {
+      return isObj(x) && typeof x.v === 'number' && isFinite(x.v) && x.v >= 0 && typeof x.t === 'number' && isFinite(x.t);
+    }).map(function (x) { return { t: Math.min(x.t, now), v: Math.min(x.v, BIG) }; });
+
     // conquistas: só ids conhecidos
     D.ACHIEVEMENTS.forEach(function (a) { if (get(raw.ach, a.id) === true) s.ach[a.id] = true; });
     // missões diárias: dia + progresso numérico por missão conhecida
@@ -183,6 +231,16 @@
       });
       if (list.length === 3) s.daily = { day: day, list: list, bonus: bool(dl.bonus, false), streak: int(dl.streak, 0, 0, 1e5) };
     }
+
+    // Presente de atualização para saves anteriores à 2.0: 1 medalha por conquista + 2 por nível do império
+    // (sem notificações em massa: o nível do império já alcançado é marcado como resgatado).
+    if (fromVersion < 3) {
+      var gift = Math.min(120, Object.keys(s.ach).length + 2 * empLvl);
+      s.merit.bal += gift; s.merit.earned += gift;
+      s.empire.claimed = empLvl;
+      s.upgradeGift = gift;
+    }
+    s.stats.meritEarned = s.merit.earned;
 
     s.created = num(raw.created, now, 0, now);
     s.lastSeen = num(raw.lastSeen, now, 0, BIG);

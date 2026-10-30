@@ -8,7 +8,73 @@
   var LUX = {}; D.LUXURY.forEach(function (l) { LUX[l.id] = l; });
   var PROP = {}; D.PROPS.forEach(function (p) { PROP[p.id] = p; });
   var SKILL = {}; D.SKILLS.forEach(function (s) { SKILL[s.id] = s; });
-  E.BIZ = BIZ; E.LUX = LUX; E.PROP = PROP; E.SKILL = SKILL;
+  var MERIT = {}; D.MERIT_SHOP.forEach(function (m) { MERIT[m.id] = m; });
+  var STOCK = {}; D.STOCKS.forEach(function (a) { STOCK[a.id] = a; });
+  E.BIZ = BIZ; E.LUX = LUX; E.PROP = PROP; E.SKILL = SKILL; E.MERIT = MERIT; E.STOCK = STOCK;
+
+  // ---------- v2.0: meta-progressão ----------
+  E.meritLvl = function (s, id) { return (s.merit && s.merit.items[id]) || 0; };
+
+  // Patente de Legado (índice em D.LEGACY_RANKS) pelas estrelas recebidas
+  E.legacyRank = function (s) {
+    var r = 0;
+    for (var i = 0; i < D.LEGACY_RANKS.length; i++) if (s.stars >= D.LEGACY_RANKS[i].stars) r = i;
+    return r;
+  };
+  E.hasRank = function (s, name) {
+    var i = D.LEGACY_RANKS.findIndex(function (x) { return x.name === name; });
+    return i >= 0 && E.legacyRank(s) >= i;
+  };
+
+  // Nível do império: floor(log10(faturamento total) / 0,5) — sobe a cada meia ordem de grandeza
+  E.empireLevel = function (s) {
+    return s.lifetimeEarned >= 10 ? Math.floor(Math.log10(s.lifetimeEarned) / D.EMPIRE_STEP) : 0;
+  };
+  E.empireNextAt = function (lvl) { return Math.pow(10, (lvl + 1) * D.EMPIRE_STEP); };
+
+  // Evento de setor ativo: rodízio fixo a cada D.SECTOR_EVENT_DAYS dias (pela data local)
+  E.sectorEventAt = function (now) {
+    var d = new Date(now);
+    var days = Math.floor((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+    var block = Math.floor(days / D.SECTOR_EVENT_DAYS);
+    var ev = D.SECTOR_EVENTS[((block % D.SECTOR_EVENTS.length) + D.SECTOR_EVENTS.length) % D.SECTOR_EVENTS.length];
+    var endDay = (block + 1) * D.SECTOR_EVENT_DAYS;
+    var endLocal = new Date(endDay * 86400000);
+    var ends = new Date(endLocal.getUTCFullYear(), endLocal.getUTCMonth(), endLocal.getUTCDate()).getTime();
+    return { ev: ev, ends: ends };
+  };
+  E.sectorMult = function (id, now) {
+    var ev = E.sectorEventAt(now).ev;
+    return ev.cats.indexOf(BIZ[id].cat) >= 0 ? ev.mult : 1;
+  };
+
+  // Melhorias de empresa compradas (st.up = quantas, em sequência)
+  E.upgCount = function (s) {
+    return D.BUSINESSES.reduce(function (a, b) { return a + ((s.biz[b.id] && s.biz[b.id].up) || 0); }, 0);
+  };
+  E.upgMult = function (s, id) {
+    var n = (s.biz[id] && s.biz[id].up) || 0, m = 1;
+    for (var i = 0; i < n; i++) if (D.BIZ_UPGRADES[i].mult) m *= D.BIZ_UPGRADES[i].mult;
+    return m;
+  };
+  E.upgSpeed = function (s, id) {
+    var n = (s.biz[id] && s.biz[id].up) || 0, m = 1;
+    for (var i = 0; i < n; i++) if (D.BIZ_UPGRADES[i].speed) m *= D.BIZ_UPGRADES[i].speed;
+    return m;
+  };
+  E.upgCost = function (s, id, i) { return BIZ[id].cost * D.BIZ_UPGRADES[i].costMul * E.costDiscount(s); };
+
+  // Eficiência: patamares de ciclos concluídos → +5% de receita cada
+  E.effLevel = function (s, id) {
+    var runs = (s.biz[id] && s.biz[id].runs) || 0, l = 0;
+    for (var i = 0; i < D.EFFICIENCY.length; i++) if (runs >= D.EFFICIENCY[i]) l = i + 1;
+    return l;
+  };
+  E.effMult = function (s, id) { return 1 + D.EFF_BONUS * E.effLevel(s, id); };
+
+  E.mgrCost = function (s, id) {
+    return BIZ[id].mgr * (1 - 0.15 * E.meritLvl(s, 'mmgr')) * (E.hasRank(s, 'Duque') ? 0.75 : 1);
+  };
 
   E.skill = function (s, id) { return s.skills[id] || 0; };
 
@@ -56,6 +122,7 @@
   // Multiplicador global de renda dos negócios
   E.globalMult = function (s, now, noTemp) {
     return E.starMult(s) * E.achMult(s) *
+      (1 + 0.05 * E.meritLvl(s, 'minc')) * (E.hasRank(s, 'Lenda Eterna') ? 1.25 : 1) *
       (1 + E.luxBonus(s, 'inc') + D.COLLECTION_BONUS * E.completedCollections(s)) *
       (noTemp ? 1 : E.tempMult(s, now));
   };
@@ -80,15 +147,17 @@
   E.bizRevenue = function (s, id, now, noTemp) {
     var b = BIZ[id], st = s.biz[id];
     if (!st || st.lvl <= 0) return 0;
+    // eventos de setor duram dias e valem também offline; eventos aleatórios (minutos) e turbos não
     return b.rev * st.lvl * E.milestoneMult(st.lvl) *
       (1 + D.EMP_BONUS * st.emp) *
       (1 + 0.1 * E.skill(s, 'carisma')) *
+      E.upgMult(s, id) * E.effMult(s, id) * E.sectorMult(id, now) *
       E.globalMult(s, now, noTemp) *
       (noTemp ? 1 : E.eventMult(s, id, now));
   };
 
   E.bizTime = function (s, id) {
-    return BIZ[id].t / ((1 + 0.06 * E.skill(s, 'tempo')) * (1 + E.luxBonus(s, 'speed')));
+    return BIZ[id].t / ((1 + 0.06 * E.skill(s, 'tempo')) * (1 + E.luxBonus(s, 'speed')) * E.upgSpeed(s, id));
   };
 
   E.bizIncome = function (s, id, now, noTemp) {
@@ -148,10 +217,26 @@
     return t * E.starMult(s);
   };
 
+  E.renoLvl = function (s, id) { return (s.reno && s.reno[id]) || 0; };
+  E.renoCost = function (s, id) { return PROP[id].cost * D.RENO_COST_MUL * Math.pow(D.RENO_GROWTH, E.renoLvl(s, id)); };
+  // Aluguel de UMA unidade do imóvel (com reformas, luxo e estrelas)
+  E.propRent = function (s, id) {
+    return PROP[id].rent * (1 + D.RENO_BONUS * E.renoLvl(s, id)) * (1 + E.luxBonus(s, 'rent')) * E.starMult(s);
+  };
   E.rentGross = function (s) {
     var t = 0;
-    D.PROPS.forEach(function (p) { t += (s.props[p.id] || 0) * p.rent; });
-    return t * (1 + E.luxBonus(s, 'rent')) * E.starMult(s);
+    D.PROPS.forEach(function (p) { var n = s.props[p.id] || 0; if (n) t += n * E.propRent(s, p.id); });
+    return t;
+  };
+
+  // Dividendos por segundo das ações em carteira: qtd × preço × rendimento/h ÷ 3600 (× estrelas)
+  E.dividendRate = function (s) {
+    var t = 0;
+    for (var id in s.hold) {
+      var a = STOCK[id], h = s.hold[id];
+      if (a && a.div && h.qty > 0 && s.mkt[id]) t += h.qty * s.mkt[id].p * a.div / 3600;
+    }
+    return t;
   };
 
   E.rentUpkeep = function (s) { return E.rentGross(s) * D.PROP_UPKEEP; };
@@ -173,13 +258,13 @@
         manual.net += E.bizCycleNet(s, b.id, now, noTemp);
       } else manual.idle++;
     });
-    var sal = E.salary(s), rent = E.rentGross(s), rentUp = E.rentUpkeep(s);
+    var sal = E.salary(s), rent = E.rentGross(s), rentUp = E.rentUpkeep(s), div = E.dividendRate(s);
     return {
-      biz: biz, salary: sal, rent: rent,
+      biz: biz, salary: sal, rent: rent, div: div,
       empUpkeep: emp, rentUpkeep: rentUp,
-      income: biz + sal + rent,
+      income: biz + sal + rent + div,
       expenses: emp + rentUp,
-      net: biz + sal + rent - emp - rentUp,
+      net: biz + sal + rent + div - emp - rentUp,
       manual: manual
     };
   };
@@ -196,13 +281,14 @@
   E.tapValue = function (s, now) {
     var flat = 1;
     for (var i = 0; i < s.jobs; i++) flat += D.JOBS[i].tap;
-    var v = flat * (1 + 0.5 * E.skill(s, 'toque')) * (1 + E.luxBonus(s, 'tap')) *
+    var v = flat * (1 + 0.5 * E.skill(s, 'toque')) * (1 + E.luxBonus(s, 'tap')) * (1 + 0.25 * E.meritLvl(s, 'mtap')) *
       E.starMult(s) * E.tempMult(s, now);
     return v + E.passiveIncome(s, now) * 0.02 * E.skill(s, 'smart');
   };
 
   E.offlineCapHours = function (s) {
-    return D.OFFLINE_BASE_H + E.skill(s, 'offline') + E.luxBonus(s, 'offline');
+    return D.OFFLINE_BASE_H + E.skill(s, 'offline') + E.luxBonus(s, 'offline') +
+      2 * E.meritLvl(s, 'moff') + (E.hasRank(s, 'Conde') ? 2 : 0);
   };
 
   E.portfolioValue = function (s) {
@@ -220,9 +306,17 @@
     for (var id in s.lux) if (s.lux[id] && LUX[id]) lux += LUX[id].cost * 0.7;
     D.BUSINESSES.forEach(function (b) {
       var st = s.biz[b.id];
-      if (st && st.lvl > 0) biz += b.cost * (Math.pow(b.r, st.lvl) - 1) / (b.r - 1) * 0.5;
+      if (st && st.lvl > 0) {
+        var v = b.cost * (Math.pow(b.r, st.lvl) - 1) / (b.r - 1);
+        for (var i = 0; i < (st.up || 0); i++) v += b.cost * D.BIZ_UPGRADES[i].costMul;
+        biz += Math.min(v, 1e300) * 0.5;
+      }
     });
-    return s.cash + E.portfolioValue(s) + props + lux + biz;
+    D.PROPS.forEach(function (p) {
+      var r = E.renoLvl(s, p.id);
+      if (r > 0) props += p.cost * D.RENO_COST_MUL * (Math.pow(D.RENO_GROWTH, r) - 1) / (D.RENO_GROWTH - 1) * 0.5;
+    });
+    return Math.min(1e300, s.cash + E.portfolioValue(s) + props + lux + biz);
   };
 
   E.potentialStars = function (s) {

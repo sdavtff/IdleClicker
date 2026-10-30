@@ -1,4 +1,4 @@
-# 🏙️ Cifrópolis — Do Zero ao Império
+# 🏙️ Cifrópolis 2.0 — Do Zero ao Império
 
 Simulador de magnata (*tycoon*) **idle/clicker** para **Android**, em retrato e para jogar com uma mão.
 Comece tocando na moeda sem um centavo, arrume um emprego, abra negócios, contrate gerentes, invista na bolsa,
@@ -6,7 +6,9 @@ em cripto e em imóveis, colecione carros, iates, jatos, relógios e arte, dispu
 
 - 100% offline · save automático no aparelho · ganhos offline (até 4 h, ampliáveis)
 - Sem anúncios forçados · nesta versão não há anúncios nem compras (bônus gratuitos com recarga)
-- Conquistas, missões diárias, desbloqueio progressivo, backups automáticos do save
+- 12 empresas com melhorias, eficiência e estatísticas; dividendos, reformas e eventos de setor
+- Conquistas (51), missões diárias, desafios semanais, 2 torneios semanais (rivais simulados 🤖), nível do império,
+  Medalhas e Loja de Mérito, patentes de Legado, backups automáticos do save
 - Mundo, nomes, logo e arte **originais**
 
 | Documento | Conteúdo |
@@ -107,7 +109,8 @@ Depois: `./gradlew assembleRelease` (APK) ou `./gradlew bundleRelease` (AAB para
 |---|---|
 | `npm run balance` | Simula 2 h de jogo com o código real e imprime a tabela de balanceamento |
 | `npm test` | Testes unitários (Node, sem dependências): compras, upgrades, produção, funcionários, despesas, offline, relógio, Legado, missões, conquistas, save, importação maliciosa, formatação |
-| `npm run test:e2e` | Teste de ponta a ponta no Chromium com tela de celular (43 verificações) — requer `npm i -D playwright && npx playwright install chromium` |
+| `npm run test:e2e` | Teste de ponta a ponta no Chromium com tela de celular (55 verificações) — requer `npm i -D playwright && npx playwright install chromium` |
+| `npm run test:perf` | Desempenho com CPU 4× mais lenta: inicialização, custo de atualização por tela, quadro, memória em sessão longa |
 | `npm run test:visual` | Percorre todas as telas em 5 tamanhos de celular (texto normal e maior) e acusa estouro de largura, alvos de toque < 40 px e textos cortados |
 | `npm run test:upgrade` | Joga com o código real da v1.0 (do git), salva e reabre com o código atual: verifica que o save antigo é preservado e migrado |
 | `node tools/balance-sim.js 480 3 prestige` | Simula 8 h com Legado e aborta se encontrar NaN/Infinity/saldo negativo |

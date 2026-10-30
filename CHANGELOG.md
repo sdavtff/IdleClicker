@@ -1,5 +1,38 @@
 # Changelog
 
+## 2.0.0 — grande atualização
+### Negócios
+- 4 novos setores de fim de jogo: Rede Aurora Hotéis (Turismo), Clínica Vida Plena (Saúde), TransCifra Logística e Órbita Cifrão Espacial (12 empresas no total).
+- Melhorias por empresa (Marketing, Automação, Expansão regional), eficiência por ciclos concluídos (+5% por patamar),
+  estatísticas individuais (ciclos, faturado, salários pagos), janela de detalhes e ranking das empresas mais lucrativas.
+- Eventos de setor: a cada 2 dias, duas categorias ficam +25% em alta (rodízio fixo, vale offline).
+### Investimentos e finanças
+- Ações pagam dividendos por hora (inclusive offline); 2 ações e 1 cripto novas; resumo da carteira com lucro/prejuízo.
+- 2 imóveis novos e reformas (+20% de aluguel por nível, até 10).
+- Painel de finanças: evolução do patrimônio (gráfico), composição da renda, ranking das empresas, dividendos e ganhos offline.
+### Progressão e conteúdo
+- Nível do império (sobe com o faturamento total) com recompensas.
+- Medalhas de Mérito (ganhas jogando, nunca vendidas) e Loja de Mérito com 6 melhorias permanentes e 2 itens exclusivos.
+- Desafios semanais (3 por semana + "semana perfeita"), 6 novos tipos de missão diária, 20 novas conquistas (51 no total),
+  7 novos itens de luxo (categoria Mansões & Ilhas e Exclusivos de Mérito), novas metas.
+- Segundo torneio semanal: Corrida Empresarial (faturamento produtivo); rivais simulados marcados com 🤖 nos dois torneios.
+- Patentes de Legado (Herdeiro → Lenda Eterna) com vantagens ao recomeçar; Legado também rende medalhas.
+### Interface
+- Ícones SVG próprios, transições direcionais, cartões com cor do setor, partículas de compra, brilho de subida de nível,
+  saldo com contagem animada, chip de perfil (nível, estrelas, medalhas), barra de progresso do império, banner de evento.
+### Correções
+- Botão de gerente mostrava/comparava o preço-base, ignorando descontos.
+- Laço lento repassava sempre 0,25 s aos sistemas de meta em quadros longos (histórico de patrimônio atrasava).
+- Itens exclusivos (preço em dinheiro zero) não podem ser comprados com dinheiro.
+### Save e desempenho
+- Save v3 com validação de todos os campos novos e presente de atualização para quem vem da 1.x.
+- 3 backups automáticos em rodízio + 1 backup diário; recuperação tenta do mais recente ao mais antigo.
+- Salvamento rápido logo após compras; blocos lentos do painel de finanças atualizam 1×/s.
+### Testes
+- 68 testes unitários, 55 verificações E2E, atualização a partir da 1.0.0/1.1.0/1.1.1 (20 cada),
+  checagem visual (5 tamanhos × 2 escalas de texto) e teste de desempenho com CPU 4× mais lenta (11 verificações).
+
+
 ## 1.1.1 — correção e polimento
 ### Painel financeiro
 - Salários de funcionários eram descontados a cada frame (inclusive na produção manual), mas o painel só somava

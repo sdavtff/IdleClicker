@@ -12,7 +12,8 @@
     "apk:release": "npx cap sync android && cd android && ./gradlew assembleRelease",
     "test:e2e": "node tools/smoke-test.js",
     "test:upgrade": "node tools/upgrade-test.js",
-    "test:visual": "node tools/visual-check.js"
+    "test:visual": "node tools/visual-check.js",
+    "test:perf": "node tools/perf-test.js"
   },
   "license": "UNLICENSED",
   "dependencies": {

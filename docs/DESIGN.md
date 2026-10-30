@@ -62,6 +62,25 @@ Tocar → $ → comprar emprego/habilidade → $ por toque maior
 | **Missões diárias** (v1.1) | 3 por dia, sorteadas de forma determinística pela data entre 8 modelos (só os já disponíveis ao jogador), com alvo escalado ao progresso. Prêmio calculado no resgate; baú ao concluir as 3, com bônus de sequência de dias. Relógio atrasado não gera dia novo |
 | **Desbloqueio progressivo** (v1.1) | Investir abre ao faturar $3 K e Luxo ao faturar $15 K; a aba bloqueada mostra o que oferece, o requisito e uma barra de progresso. Saves antigos que já passaram do requisito mantêm o acesso |
 
+## 4b. Sistemas da versão 2.0
+
+| Sistema | Como funciona |
+|---|---|
+| **12 empresas** | 4 setores de fim de jogo (Turismo, Saúde, Logística, Aeroespacial) com degraus de custo de 10.000× e r = 1,15, para que o fim de jogo desacelere |
+| **Melhorias de empresa** | 3 por empresa, em sequência: Marketing (nv 25, ×1,5), Automação (nv 75, ciclo ÷1,25), Expansão regional (nv 150, ×2) |
+| **Eficiência** | +5% por patamar de ciclos concluídos (100 a 1 milhão) |
+| **Detalhes e ranking** | janela por empresa com estatísticas, multiplicadores e melhorias; ranking por renda em Finanças |
+| **Eventos de setor** | a cada 2 dias, duas categorias +25% (rodízio fixo de 6 eventos) |
+| **Dividendos** | ações rendem 0,4%–3% do preço por hora a quem as possui, inclusive offline |
+| **Reformas** | +20% de aluguel por nível em cada tipo de imóvel (até 10) |
+| **Nível do império** | ⌊log10(faturamento total)/0,5⌋; recompensa em medalhas; nunca diminui |
+| **Medalhas de Mérito** | moeda ganha jogando (conquistas, Legado, desafios, torneios, nível do império); nunca vendida |
+| **Loja de Mérito** | 6 melhorias permanentes (mantidas no Legado) e 2 exclusivos de luxo |
+| **Desafios semanais** | 3 por semana, alvo escalado ao jogador, dinheiro + medalhas; bônus de semana perfeita |
+| **Corrida Empresarial** | 2º torneio semanal: faturamento produtivo na semana; mesmos prêmios do torneio da bolsa (sem turbo) |
+| **Patentes de Legado** | Herdeiro → Barão → Conde → Duque → Magnata Imperial → Lenda Eterna, com vantagens ao recomeçar |
+| **Histórico do patrimônio** | 1 amostra por minuto de jogo (até 2 h), gráfico em Finanças |
+
 ## 5. Monetização justa (diferencial)
 
 - **Só anúncios recompensados voluntários**, em 3 pontos: Turbo x2 por 30 min (acumula até 4 h), Lucro rápido (10 min de renda, recarga de 15 min) e Dobrar ganhos offline.
@@ -110,9 +129,11 @@ IdleClicker/
 │       ├── market.js         ← bolsa/cripto (passeio aleatório) e torneio semanal
 │       ├── save.js           ← validação campo a campo, migração de versões, (de)codificação de backups
 │       ├── game.js           ← estado, ações, laço, eventos, metas, conquistas, missões, offline, prestígio, save/backups
+│       ├── meta.js           ← v2.0: nível do império, desafios semanais, Corrida Empresarial, histórico do patrimônio
 │       ├── audio.js          ← efeitos sonoros sintetizados
 │       ├── ads.js            ← AdService (recompensado voluntário) e Store (remover anúncios) — stubs
 │       ├── ui.js             ← interface: HUD, abas, telas, toasts, modais, efeitos
+│       ├── ui2.js            ← v2.0: ícones SVG, partículas, gráfico de área, detalhes da empresa, perfil
 │       ├── tutorial.js       ← tutorial de 1 minuto
 │       └── main.js           ← boot, laço requestAnimationFrame, autosave, offline, botão voltar
 ├── android/                  ← projeto nativo gerado pelo Capacitor (Gradle)

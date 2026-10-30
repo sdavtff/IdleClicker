@@ -36,25 +36,29 @@ um jogador "guloso" que toca 3×/s, sempre compra o item com menor tempo de reto
 | 🏟️ Arena Fênix | Esportes | $2,5 M | 1,13 | $70 K | 60 s | $1,17 K | $60 M |
 | ⚡ SolarVolt Energia | Energia | $35 M | 1,12 | $650 K | 120 s | $5,4 K | $700 M |
 | 🏦 Banco Cofre Dourado | Bancos | $500 M | 1,12 | $6 M | 240 s | $25 K | $2 B |
+| 🏨 Rede Aurora Hotéis | Turismo | $10 T | 1,15 | $120 M | 300 s | $400 K | $50 T |
+| 🏥 Clínica Vida Plena | Saúde | $100 Qa | 1,15 | $2,4 B | 360 s | $6,7 M | $500 Qa |
+| 🚚 TransCifra Logística | Logística | $1 Sx | 1,15 | $50 B | 420 s | $119 M | $5 Sx |
+| 🛰️ Órbita Cifrão Espacial | Aeroespacial | $10 Sp | 1,15 | $1 T | 480 s | $2,1 B | $50 Sp |
 
-## Tabela das primeiras 2 horas (v1.1.1 — jogador ativo, 3 toques/s, resgata missões, eventos aleatórios desligados)
+## Tabela das primeiras 2 horas (v2.0 — jogador ativo, 3 toques/s, resgata missões e desafios, compra melhorias/reformas/mérito; eventos aleatórios desligados)
 
 | Min | Faturado (vida) | Renda passiva/s | Valor do toque | Patrimônio | Gerentes | Empregos | ⭐ disponíveis | ⭐ ativas | Conquistas | Negócios (nível) |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| 1 | $1,51 K | $3 | $15 | $812 | 0 | 2 | 0 | 0 | 1 | 🍹6 |
-| 2 | $11,9 K | $157 | $84 | $1,47 K | 1 | 3 | 0 | 0 | 2 | 🍹25 🍔3 |
-| 3 | $44,4 K | $227 | $84 | $30,2 K | 1 | 3 | 0 | 0 | 2 | 🍹29 🍔5 |
-| 5 | $183 K | $1,17 K | $445 | $46,1 K | 1 | 4 | 0 | 0 | 4 | 🍹50 🍔10 🎓4 |
-| 10 | $2,46 M | $8,91 K | $2,86 K | $345 K | 3 | 5 | 0 | 0 | 5 | 🍹50 🍔32 🎓26 💻6 |
-| 15 | $12,7 M | $45,7 K | $3,05 K | $4,13 M | 4 | 5 | 0 | 0 | 6 | 🍹56 🍔50 🎓33 💻25 📺4 |
-| 20 | $39,8 M | $98,7 K | $3,05 K | $18,3 M | 4 | 5 | 0 | 0 | 6 | 🍹59 🍔50 🎓50 💻28 📺7 |
-| 30 | $216 M | $414 K | $17,9 K | $67,5 M | 5 | 6 | 1 | 0 | 7 | 🍹64 🍔53 🎓50 💻35 📺28 🏟️4 |
-| 45 | $1,19 B | $829 K | $18,8 K | $787 M | 5 | 6 | 3 | 0 | 10 | 🍹70 🍔59 🎓55 💻50 📺35 🏟️10 ⚡1 |
-| 60 | $4,20 B | $5,37 M | $18,8 K | $1,44 B | 6 | 6 | 6 | 0 | 12 | 🍹74 🍔63 🎓59 💻51 📺50 🏟️31 ⚡5 |
-| 75 | $11,0 B | $8,90 M | $137 K | $6,40 B | 6 | 7 | 10 | 0 | 14 | 🍹76 🍔66 🎓62 💻54 📺50 🏟️34 ⚡9 |
-| 90 | $21,3 B | $16,9 M | $137 K | $11,7 B | 6 | 7 | 14 | 0 | 14 | 🍹77 🍔67 🎓64 💻55 📺50 🏟️50 ⚡9 |
-| 105 | $45,7 B | $34,0 M | $143 K | $21,4 B | 7 | 7 | 21 | 0 | 15 | 🍹79 🍔69 🎓66 💻58 📺53 🏟️50 ⚡30 🏦3 |
-| 120 | $83,9 B | $44,6 M | $143 K | $45,9 B | 7 | 7 | 28 | 0 | 15 | 🍹81 🍔71 🎓68 💻60 📺55 🏟️50 ⚡33 🏦5 |
+| 1 | $1,99 K | $3 | $15 | $1,29 K | 0 | 2 | 0 | 0 | 1 | 🍹6 |
+| 2 | $12,3 K | $163 | $84 | $1,63 K | 1 | 3 | 0 | 0 | 2 | 🍹26 🍔4 |
+| 3 | $44,8 K | $227 | $84 | $30,7 K | 1 | 3 | 0 | 0 | 2 | 🍹29 🍔5 |
+| 5 | $431 K | $3,77 K | $486 | $98,1 K | 2 | 4 | 0 | 0 | 6 | 🍹50 🍔26 🎓8 💻1 |
+| 10 | $5,11 M | $23,6 K | $2,86 K | $1,21 M | 3 | 5 | 0 | 0 | 8 | 🍹55 🍔50 🎓27 💻7 |
+| 15 | $23,3 M | $71,8 K | $3,05 K | $8,77 M | 4 | 5 | 0 | 0 | 8 | 🍹61 🍔50 🎓35 💻27 📺5 |
+| 20 | $67,4 M | $150 K | $3,05 K | $34,4 M | 4 | 5 | 0 | 0 | 8 | 🍹63 🍔52 🎓50 💻29 📺8 🏟️1 |
+| 30 | $375 M | $685 K | $22,3 K | $151 M | 5 | 6 | 1 | 0 | 10 | 🍹68 🍔56 🎓52 💻50 📺28 🏟️5 |
+| 45 | $2,62 B | $3,74 M | $22,3 K | $1,32 B | 6 | 6 | 5 | 0 | 12 | 🍹73 🍔62 🎓59 💻51 📺35 🏟️27 ⚡3 |
+| 60 | $9,53 B | $9,16 M | $171 K | $3,80 B | 6 | 7 | 9 | 0 | 14 | 🍹78 🍔68 🎓65 💻57 📺51 🏟️34 ⚡9 |
+| 75 | $22,2 B | $20,8 M | $171 K | $8,44 B | 6 | 7 | 14 | 0 | 15 | 🍹79 🍔69 🎓66 💻58 📺52 🏟️50 ⚡10 |
+| 90 | $53,1 B | $45,6 M | $171 K | $24,4 B | 7 | 7 | 23 | 0 | 15 | 🍹81 🍔71 🎓67 💻59 📺54 🏟️50 ⚡29 |
+| 105 | $107 B | $57,0 M | $171 K | $66,6 B | 7 | 7 | 32 | 0 | 17 | 🍹82 🍔72 🎓69 💻60 📺55 🏟️50 ⚡32 🏦1 |
+| 120 | $165 B | $104 M | $171 K | $108 B | 7 | 7 | 40 | 0 | 17 | 🍹82 🍔72 🎓69 💻61 📺56 🏟️50 ⚡32 🏦2 |
 
 *⭐ disponíveis = estrelas que o Legado daria naquele momento; ⭐ ativas = estrelas já recebidas.*
 
@@ -64,16 +68,19 @@ um jogador "guloso" que toca 3×/s, sempre compra o item com menor tempo de reto
 |---|---|
 | 9 s | 1º emprego (Panfleteiro) e 1º negócio (Suco da Esquina) |
 | ~2 min | 1º gerente → começa a renda passiva; 2º negócio |
-| ~4–6 min | 3º e 4º negócios (Academia, PixelForja) |
-| ~12 min | 5º negócio (Rede Onda Viva) |
-| ~15 min | Renda passiva passa a renda por toque |
-| ~22 min | Arena Fênix (6º negócio) |
-| ~26 min | **1ª estrela de Legado disponível** |
-| ~37 min | SolarVolt Energia (7º negócio) |
-| ~1 h 40 min | Banco Cofre Dourado (8º negócio) |
+| ~4–5 min | 3º e 4º negócios (Academia, PixelForja) |
+| ~10 min | 5º negócio (Rede Onda Viva) |
+| ~17 min | Arena Fênix (6º negócio) |
+| ~22 min | **1ª estrela de Legado disponível** |
+| ~33 min | SolarVolt Energia (7º negócio) |
+| ~1 h 32 min | Banco Cofre Dourado (8º negócio) |
+| ~4 h (com Legados) | Rede Aurora Hotéis (9º) |
+| ~5 h 25 min | Clínica Vida Plena (10º) |
+| 12 h+ | TransCifra Logística e Órbita Cifrão Espacial (objetivos de longo prazo) |
 
-Comparado à v1.1.0 (mesmas condições, eventos desligados), os primeiros 30 min são idênticos e a segunda hora fica
-~1,5× mais rápida, pelo novo custo dos funcionários tardios e pelo gerente do Banco mais barato (28 estrelas às 2 h, antes 22).
+Comparado à v1.1.1 (mesmas condições), a v2.0 fica ~2× mais rápida na primeira sessão (165 B e 40 ⭐ às 2 h, antes 84 B e 28 ⭐),
+pelas melhorias de empresa, eficiência, evento de setor, Loja de Mérito e mais conquistas. Cada sistema foi medido isoladamente
+e calibrado (ver "Calibração da v2.0").
 *Observação: as tabelas anteriores tinham eventos aleatórios ligados por engano (a trava de relógio reativava o
 valor-sentinela usado para desligá-los); agora `G.options.randomEvents` desliga de fato.*
 
@@ -92,11 +99,42 @@ valor-sentinela usado para desligá-los); agora `G.options.randomEvents` desliga
 
 Com estrelas, conquistas e luxo, o retorno real é várias vezes menor. O 10º funcionário é objetivo de fim de jogo.
 
-### Longo prazo com Legado (`node tools/balance-sim.js 480 3 prestige events`)
+### Calibração da v2.0 (impacto medido de cada sistema, faturamento às 2 h)
+
+| Sistema | 1ª versão | Ajuste aplicado |
+|---|---|---|
+| Melhorias de empresa (marketing a 100× o preço-base) | 3,7× | marketing 5.000×, automação 2×10⁶×, expansão 10¹⁰× |
+| Evento de setor (+50%) | até 5,5× (a data simulada caiu nos negócios-chave) | +25% |
+| Loja de Mérito (Luvas de Ouro barata) | 1,6× aos 10 min | Luvas de 10 → 25 medalhas |
+| 4 empresas novas (custo ~14× por degrau) | ciclos de Legado aceleravam para 4 min; estrelas de 2,7 mil a 3,3 milhões em 50 min | degraus de 10.000× no custo e r = 1,15: os ciclos voltam a desacelerar |
+| Patentes (Barão 50 … Lenda 25 mil) | todas alcançadas em ~4 h | Herdeiro 10, Barão 100, Conde 1 mil, Duque 10 mil, Magnata Imperial 100 mil, Lenda 1 milhão |
+
+### Longo prazo com Legado na v2.0 (`node tools/balance-sim.js 720 2 prestige events`)
+
+Legados: 49 min (+5 ⭐) → 1h23 (10) → 1h59 (20) → 2h32 (40) → … → 4h12 (11,6 mil). Hotel aos 4h16; depois os ciclos
+**desaceleram** (5 → 9 → 13 → 23 → 34 → 59 → 85 → 127 min), com a Clínica aos 5h24. Logística e Espaço ficam além de 12 h.
+Nenhum NaN, Infinity ou saldo negativo (o simulador aborta se encontrar).
+
+### Longo prazo com Legado (histórico v1.1)
 
 Estratégia: fundar Legado quando as estrelas novas ≥ max(5, estrelas atuais). Resultado da simulação de 8 h (também rodada com 12 h e eventos aleatórios ligados):
 1º Legado aos ~54 min (+5 ⭐), depois a cada 30–45 min, dobrando as estrelas (5 → 10 → 20 → 40 → 81 → …).
 Todos os números permanecem finitos e não negativos (o simulador aborta se encontrar NaN, Infinity ou saldo negativo).
+
+## Fórmulas da v2.0
+
+| O quê | Fórmula |
+|---|---|
+| Melhorias de empresa | em sequência: Marketing (nível 25, 5.000× o preço-base, receita ×1,5), Automação (nível 75, 2×10⁶×, ciclo ÷1,25), Expansão (nível 150, 10¹⁰×, receita ×2) |
+| Eficiência | patamares de ciclos concluídos 100 / 1 mil / 10 mil / 100 mil / 1 milhão → +5% de receita cada |
+| Evento de setor | rodízio fixo a cada 2 dias (6 eventos), +25% de receita nas 2 categorias do evento (vale também offline) |
+| Dividendos | quantidade × preço × rendimento/h ÷ 3600 por segundo (0,4% a 3%/h conforme a ação; cripto não paga) |
+| Reforma de imóvel | custo-base × 3 × 2,2^nível; +20% de aluguel por nível naquele tipo; até nível 10 |
+| Nível do império | ⌊log10(faturamento total) / 0,5⌋; 2 🎖️ por nível (+5 a cada 5 níveis); nunca diminui |
+| Medalhas de Mérito | conquistas (+1), Legado (5 + estrelas/10, até 50), desafios semanais (10–15 + 20 na semana perfeita), torneios (2–25) |
+| Loja de Mérito | custo × crescimento^nível; Consultoria +5% receita/nível (até 10), Luvas +25% toque, Cofre +2h offline, Contador −3 min no Lucro rápido, Headhunter −15% gerentes, Fundo Fiduciário dinheiro inicial no Legado |
+| Patentes de Legado | Herdeiro (10 ⭐) emprego + $1 K inicial · Barão (100) Suco nv 25 com gerente · Conde (1 mil) +2h offline · Duque (10 mil) gerentes −25% · Magnata Imperial (100 mil) 4 negócios nv 25 · Lenda Eterna (1 milhão) +25% receita |
+| Multiplicador global (v2.0) | estrelas × conquistas × (1 + 0,05 × Consultoria) × (Lenda ? 1,25 : 1) × (1 + luxo + coleções) × turbos |
 
 ## Recompensas de progressão (v1.1)
 

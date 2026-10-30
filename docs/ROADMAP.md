@@ -14,10 +14,10 @@
 ## Médio prazo (conteúdo)
 - **Mais negócios** por categoria (ex.: Varejo → Mercadinho → Rede de Supermercados) e **regiões da cidade** desbloqueáveis.
 - **Gerentes com personalidade**: raridades e habilidades (ex.: "−20% tempo de ciclo").
-- **Pesquisa & Desenvolvimento**: árvore de *upgrades* permanentes comprados com estrelas.
-- **Bolsa avançada**: dividendos, ordens limitadas, IPO das suas próprias empresas.
-- **Eventos sazonais** (Carnaval, Black Friday, Natal) com itens de luxo exclusivos.
-- Mais conquistas e coleção expandida (barcos, imóveis icônicos) — o sistema de conquistas já existe (v1.1).
+- **Pesquisa & Desenvolvimento**: árvore de *upgrades* permanentes (a Loja de Mérito da 2.0 é um primeiro passo).
+- **Bolsa avançada**: ordens limitadas e IPO das suas próprias empresas (dividendos já existem desde a 2.0).
+- **Eventos sazonais** (Carnaval, Black Friday, Natal) com itens exclusivos — a 2.0 já tem eventos de setor em rodízio.
+- Mais conquistas e coleções (a 2.0 tem 51 conquistas e 20 itens de luxo).
 - **Personalização**: avatar do magnata, escritório e garagem que mostram os itens de luxo.
 
 ## Longo prazo (social e retenção)
@@ -29,5 +29,5 @@
 ## Técnico
 - Migrar o save para `@capacitor/preferences` (redundância ao `localStorage`).
 - *Service worker* para jogar também como PWA no navegador.
-- Rodar `npm test` e `npm run test:e2e` no CI a cada push (os testes já existem).
+- Rodar `npm test`, `npm run test:e2e`, `test:upgrade`, `test:visual` e `test:perf` no CI a cada push (os testes já existem).
 - Pipeline de CI que gera o APK automaticamente a cada *push* (GitHub Actions + `setup-android`).
